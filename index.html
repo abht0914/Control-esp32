@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control ESP32 Multi-Usuario</title>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <style>
+        body { font-family: sans-serif; background: #f0f2f5; display: flex; justify-content: center; padding: 20px; }
+        .card { background: white; padding: 2rem; border-radius: 12px; shadow: 0 4px 6px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
+        .hidden { display: none; }
+        input, button { width: 100%; padding: 10px; margin: 10px 0; border-radius: 6px; border: 1px solid #ccc; }
+        button { background: #007bff; color: white; font-weight: bold; cursor: pointer; border: none; }
+        .status { padding: 10px; border-radius: 5px; text-align: center; margin-bottom: 10px; }
+        .online { background: #d4edda; color: #155724; }
+        .offline { background: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+
+<div class="card" id="login-section">
+    <h2>🔑 Iniciar Sesión</h2>
+    <input type="text" id="user" placeholder="Usuario MQTT">
+    <input type="password" id="pass" placeholder="Contraseña">
+    <button onclick="connectMQTT()">Conectar al ESP32</button>
+</div>
+
+<div class="card hidden" id="control-section">
+    <div id="conn-status" class="status offline">Desconectado</div>
+    <h2>🎮 Panel de Control</h2>
+    <p>Dispositivos conectados: <strong id="clients-count">1</strong>/10</p>
+    <hr>
+    <button id="btn-led" onclick="toggleLED()" style="background: #28a745;">ENCENDER LED</button>
+    <p>Estado actual: <span id="led-state">APAGADO</span></p>
+</div>
+
+<script>
+    let client;
+    let ledStatus = false;
+
+    function connectMQTT() {
+        const user = document.getElementById('user').value;
+        const pass = document.getElementById('pass').value;
+
+        // Configuración para Broker (Ejemplo con HiveMQ Public o tu propio broker)
+        const options = {
+            username: user,
+            password: pass,
+            clientId: 'web_client_' + Math.random().toString(16).substr(2, 8)
+        };
+
+        // Conexión vía WebSockets (puerto 8884 para SSL en la mayoría de brokers)
+        client = mqtt.connect('wss://broker.hivemq.com:8884/mqtt', options);
+
+        client.on('connect', () => {
+            document.getElementById('login-section').classList.add('hidden');
+            document.getElementById('control-section').classList.remove('hidden');
+            document.getElementById('conn-status').innerText = "Conectado Online";
+            document.getElementById('conn-status').className = "status online";
+            
+            client.subscribe('esp32/estado'); // Escuchar cambios
+        });
+
+        client.on('message', (topic, message) => {
+            if(topic === 'esp32/estado') {
+                ledStatus = message.toString() === 'ON';
+                updateUI();
+            }
+        });
+    }
+
+    function toggleLED() {
+        const command = ledStatus ? 'OFF' : 'ON';
+        client.publish('esp32/comando', command);
+    }
+
+    function updateUI() {
+        document.getElementById('led-state').innerText = ledStatus ? 'ENCENDIDO' : 'APAGADO';
+        const btn = document.getElementById('btn-led');
+        btn.innerText = ledStatus ? 'APAGAR LED' : 'ENCENDER LED';
+        btn.style.background = ledStatus ? '#dc3545' : '#28a745';
+    }
+</script>
+</body>
+</html>
