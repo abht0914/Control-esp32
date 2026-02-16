@@ -3,35 +3,39 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Control ESP32 Multi-Usuario</title>
+    <title>Control ESP32 - Multi-Usuario</title>
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <style>
-        body { font-family: sans-serif; background: #f0f2f5; display: flex; justify-content: center; padding: 20px; }
-        .card { background: white; padding: 2rem; border-radius: 12px; shadow: 0 4px 6px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #121212; color: white; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        .card { background: #1e1e1e; padding: 2rem; border-radius: 15px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); width: 100%; max-width: 350px; text-align: center; }
         .hidden { display: none; }
-        input, button { width: 100%; padding: 10px; margin: 10px 0; border-radius: 6px; border: 1px solid #ccc; }
-        button { background: #007bff; color: white; font-weight: bold; cursor: pointer; border: none; }
-        .status { padding: 10px; border-radius: 5px; text-align: center; margin-bottom: 10px; }
-        .online { background: #d4edda; color: #155724; }
-        .offline { background: #f8d7da; color: #721c24; }
+        input { width: 90%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 1px solid #333; background: #252525; color: white; }
+        button { width: 100%; padding: 12px; margin-top: 15px; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        .btn-connect { background: #007bff; color: white; }
+        .btn-connect:hover { background: #0056b3; }
+        .status { padding: 8px; border-radius: 5px; font-size: 0.9rem; margin-bottom: 20px; }
+        .online { background: #1b5e20; color: #c8e6c9; }
+        .offline { background: #b71c1c; color: #ffcdd2; }
+        #btn-led { font-size: 1.2rem; height: 100px; border-radius: 50px; background: #444; color: white; border: 4px solid #333; }
+        .led-on { background: #2e7d32 !important; border-color: #4caf50 !important; box-shadow: 0 0 20px #4caf50; }
     </style>
 </head>
 <body>
 
 <div class="card" id="login-section">
-    <h2>🔑 Iniciar Sesión</h2>
-    <input type="text" id="user" placeholder="Usuario MQTT">
+    <h2 style="margin-bottom: 5px;">🤖 ESP32 Login</h2>
+    <p style="color: #888; font-size: 0.8rem; margin-bottom: 20px;">Ingresa tus credenciales de HiveMQ</p>
+    <input type="text" id="user" placeholder="Usuario">
     <input type="password" id="pass" placeholder="Contraseña">
-    <button onclick="connectMQTT()">Conectar al ESP32</button>
+    <button class="btn-connect" onclick="connectMQTT()">CONECTAR SISTEMA</button>
 </div>
 
 <div class="card hidden" id="control-section">
     <div id="conn-status" class="status offline">Desconectado</div>
-    <h2>🎮 Panel de Control</h2>
-    <p>Dispositivos conectados: <strong id="clients-count">1</strong>/10</p>
-    <hr>
-    <button id="btn-led" onclick="toggleLED()" style="background: #28a745;">ENCENDER LED</button>
-    <p>Estado actual: <span id="led-state">APAGADO</span></p>
+    <h3>Panel de Control</h3>
+    <p style="font-size: 0.8rem; color: #888;">Control global para 10 dispositivos</p>
+    <button id="btn-led" onclick="toggleLED()">CARGANDO...</button>
+    <p id="text-state" style="margin-top: 15px; font-weight: bold; color: #aaa;">Estado: Esperando...</p>
 </div>
 
 <script>
@@ -42,23 +46,28 @@
         const user = document.getElementById('user').value;
         const pass = document.getElementById('pass').value;
 
-        // Configuración para Broker (Ejemplo con HiveMQ Public o tu propio broker)
         const options = {
             username: user,
             password: pass,
-            clientId: 'web_client_' + Math.random().toString(16).substr(2, 8)
+            clientId: 'web_user_' + Math.random().toString(16).substr(2, 5),
+            clean: true
         };
 
-        // Conexión vía WebSockets (puerto 8884 para SSL en la mayoría de brokers)
-        client = mqtt.connect('wss://broker.hivemq.com:8884/mqtt', options);
+        // URL YA SUSTITUIDA CON TU CLUSTER DE HIVEMQ
+        const clusterUrl = 'wss://7340fcf31a5f4b45984049723fa706e8.s1.eu.hivemq.cloud:8884/mqtt';
+        
+        console.log("Intentando conectar a:", clusterUrl);
+        client = mqtt.connect(clusterUrl, options);
 
         client.on('connect', () => {
+            console.log("¡Conexión exitosa!");
             document.getElementById('login-section').classList.add('hidden');
             document.getElementById('control-section').classList.remove('hidden');
-            document.getElementById('conn-status').innerText = "Conectado Online";
+            document.getElementById('conn-status').innerText = "● SISTEMA ONLINE";
             document.getElementById('conn-status').className = "status online";
             
-            client.subscribe('esp32/estado'); // Escuchar cambios
+            client.subscribe('esp32/estado');
+            updateUI(); 
         });
 
         client.on('message', (topic, message) => {
@@ -67,18 +76,34 @@
                 updateUI();
             }
         });
+
+        client.on('error', (err) => {
+            alert("Error de conexión. Verifica tu usuario y contraseña.");
+            console.error(err);
+            client.end();
+        });
     }
 
     function toggleLED() {
         const command = ledStatus ? 'OFF' : 'ON';
-        client.publish('esp32/comando', command);
+        client.publish('esp32/comando', command, { qos: 1 });
     }
 
     function updateUI() {
-        document.getElementById('led-state').innerText = ledStatus ? 'ENCENDIDO' : 'APAGADO';
         const btn = document.getElementById('btn-led');
-        btn.innerText = ledStatus ? 'APAGAR LED' : 'ENCENDER LED';
-        btn.style.background = ledStatus ? '#dc3545' : '#28a745';
+        const txt = document.getElementById('text-state');
+        
+        if(ledStatus) {
+            btn.innerText = "ENCENDIDO";
+            btn.classList.add('led-on');
+            txt.innerText = "Estado: ACTIVADO";
+            txt.style.color = "#4caf50";
+        } else {
+            btn.innerText = "APAGADO";
+            btn.classList.remove('led-on');
+            txt.innerText = "Estado: DESACTIVADO";
+            txt.style.color = "#aaa";
+        }
     }
 </script>
 </body>
