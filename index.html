@@ -1,17 +1,102 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Alarma Pro</title>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <style>
+        body { 
+            font-family: 'Segoe UI', sans-serif; 
+            background: #0f1115; 
+            color: white; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            min-height: 100vh; 
+            margin: 0; 
+        }
+        .card { 
+            background: #1a1d23; 
+            padding: 2rem; 
+            border-radius: 20px; 
+            box-shadow: 0 15px 35px rgba(0,0,0,0.7); 
+            width: 100%; 
+            max-width: 340px; 
+            text-align: center; 
+        }
+        .hidden { display: none; }
+        
+        /* Login */
+        input { width: 100%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 1px solid #333; background: #252a33; color: white; box-sizing: border-box; }
+        .btn-connect { width: 100%; background: #007bff; color: white; padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
+
+        /* Botón Circular */
+        .status { font-size: 0.7rem; font-weight: bold; letter-spacing: 1.5px; margin-bottom: 20px; text-transform: uppercase; }
+        .online { color: #00ff88; }
+        .offline { color: #ff4444; }
+
+        .power-container { margin: 30px auto; width: 120px; height: 120px; }
+        #btn-led {
+            width: 100%; height: 100%; border-radius: 50%; background: #22272e; border: 6px solid #333;
+            color: #444; font-size: 2.5rem; cursor: pointer; transition: all 0.4s ease;
+            display: flex; align-items: center; justify-content: center; outline: none;
+        }
+        .led-on { color: #ff4444 !important; border-color: #ff4444 !important; box-shadow: 0 0 30px rgba(255, 68, 68, 0.4); }
+
+        /* Historial con Scroll */
+        .history-container {
+            margin-top: 25px;
+            text-align: left;
+            background: #121418;
+            border-radius: 10px;
+            padding: 10px;
+            border: 1px solid #333;
+        }
+        .history-title { font-size: 0.75rem; color: #888; margin-bottom: 8px; display: flex; justify-content: space-between; }
+        #history-list { max-height: 120px; overflow-y: auto; }
+        .history-item { font-size: 0.7rem; padding: 6px 0; border-bottom: 1px solid #1a1d23; color: #bbb; display: flex; justify-content: space-between; }
+        .history-item span { color: #ff4444; font-weight: bold; margin-right: 5px; }
+        
+        /* Botón de limpiar */
+        .btn-clear { background: none; border: none; color: #555; cursor: pointer; font-size: 0.6rem; text-decoration: underline; }
+    </style>
+</head>
+<body>
+
+<div class="card" id="login-section">
+    <h2 style="margin-bottom: 20px;">Seguridad IoT</h2>
+    <input type="text" id="user" placeholder="Usuario HiveMQ">
+    <input type="password" id="pass" placeholder="Contraseña">
+    <button class="btn-connect" onclick="connectMQTT()">INGRESAR AL PANEL</button>
+</div>
+
+<div class="card hidden" id="control-section">
+    <div id="conn-status" class="status offline">● DESCONECTADO</div>
+    
+    <div class="power-container">
+        <button id="btn-led" onclick="toggleLED()">⏻</button>
+    </div>
+
+    <p id="text-state" style="font-size: 0.8rem; margin-bottom: 5px;">SISTEMA APAGADO</p>
+
+    <div class="history-container">
+        <div class="history-title">
+            <span>ÚLTIMOS 10 REGISTROS</span>
+            <button class="btn-clear" onclick="clearHistory()">Borrar</button>
+        </div>
+        <div id="history-list">
+            </div>
+    </div>
+</div>
+
 <script>
     let client;
     let alarmStatus = false;
 
-    // Cargar historial guardado al abrir la página
+    // 1. CARGAR HISTORIAL AL INICIAR
     document.addEventListener('DOMContentLoaded', () => {
-        const savedHistory = JSON.parse(localStorage.getItem('alarma_historial')) || [];
-        const lista = document.getElementById('history-list');
-        savedHistory.forEach(item => {
-            const div = document.createElement('div');
-            div.className = 'history-item';
-            div.innerHTML = item;
-            lista.appendChild(div);
-        });
+        renderHistory();
     });
 
     function connectMQTT() {
@@ -32,7 +117,6 @@
             document.getElementById('control-section').classList.remove('hidden');
             document.getElementById('conn-status').innerText = "● PROTECCIÓN ACTIVA";
             document.getElementById('conn-status').className = "status online";
-            
             client.subscribe('esp32/estado');
             client.subscribe('esp32/alarma_activada');
         });
@@ -43,34 +127,36 @@
                 updateUI();
             }
             if(topic === 'esp32/alarma_activada') {
-                agregarAlHistorial();
+                saveToDB();
             }
         });
+
+        client.on('error', () => alert("Credenciales incorrectas"));
     }
 
-    function agregarAlHistorial() {
-        const lista = document.getElementById('history-list');
+    // 2. GUARDAR EN "BASE DE DATOS" LOCAL
+    function saveToDB() {
         const ahora = new Date();
         const fechaHora = ahora.toLocaleDateString() + " " + ahora.toLocaleTimeString();
-        const textoHtml = `<span>⚠ DISPARO:</span> ${fechaHora}`;
-        
-        const nuevoRegistro = document.createElement('div');
-        nuevoRegistro.className = 'history-item';
-        nuevoRegistro.innerHTML = textoHtml;
-        
-        // Añadir al inicio de la lista visual
-        lista.insertBefore(nuevoRegistro, lista.firstChild);
+        const registro = `<span>⚠ DISPARO</span> ${fechaHora}`;
 
-        // --- LÓGICA DE BASE DE DATOS LOCAL ---
-        let historial = JSON.parse(localStorage.getItem('alarma_historial')) || [];
-        historial.unshift(textoHtml); // Añade al inicio del array
-        if(historial.length > 10) historial.pop(); // Mantiene solo los últimos 10
-        localStorage.setItem('alarma_historial', JSON.stringify(historial));
+        let historial = JSON.parse(localStorage.getItem('alarma_db')) || [];
+        historial.unshift(registro); // Nuevo arriba
+        if(historial.length > 10) historial.pop(); // Solo 10
+        
+        localStorage.setItem('alarma_db', JSON.stringify(historial));
+        renderHistory();
+    }
 
-        // Limitar la lista visual a 10 elementos
-        while (lista.children.length > 10) {
-            lista.removeChild(lista.lastChild);
-        }
+    function renderHistory() {
+        const lista = document.getElementById('history-list');
+        const historial = JSON.parse(localStorage.getItem('alarma_db')) || [];
+        lista.innerHTML = historial.map(item => `<div class="history-item">${item}</div>`).join('');
+    }
+
+    function clearHistory() {
+        localStorage.removeItem('alarma_db');
+        renderHistory();
     }
 
     function toggleLED() {
@@ -92,3 +178,5 @@
         }
     }
 </script>
+</body>
+</html>
