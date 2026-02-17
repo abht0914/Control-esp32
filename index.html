@@ -1,187 +1,94 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ESP32 Smart Control</title>
-    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
-    <style>
-        body { 
-            font-family: 'Segoe UI', sans-serif; 
-            background: #0f1115; 
-            color: white; 
-            display: flex; 
-            justify-content: center; 
-            align-items: center; 
-            min-height: 100vh; 
-            margin: 0; 
-        }
-        .card { 
-            background: #1a1d23; 
-            padding: 2.5rem; 
-            border-radius: 20px; 
-            box-shadow: 0 15px 35px rgba(0,0,0,0.7); 
-            width: 100%; 
-            max-width: 320px; 
-            text-align: center; 
-        }
-        .hidden { display: none; }
-        
-        /* Estilos de Login */
-        input { 
-            width: 100%; 
-            padding: 12px; 
-            margin: 10px 0; 
-            border-radius: 8px; 
-            border: 1px solid #333; 
-            background: #252a33; 
-            color: white; 
-            box-sizing: border-box;
-        }
-        .btn-connect { 
-            width: 100%; 
-            background: #007bff; 
-            color: white; 
-            padding: 12px; 
-            border: none; 
-            border-radius: 8px; 
-            font-weight: bold; 
-            cursor: pointer;
-        }
-
-        /* Indicador de Estado Superior */
-        .status { 
-            font-size: 0.7rem; 
-            font-weight: bold; 
-            letter-spacing: 1.5px; 
-            margin-bottom: 30px; 
-            text-transform: uppercase;
-        }
-        .online { color: #00ff88; }
-        .offline { color: #ff4444; }
-
-        /* EL BOTÓN CIRCULAR DE ENCENDIDO */
-        .power-container {
-            margin: 40px auto;
-            width: 140px;
-            height: 140px;
-        }
-
-        #btn-led {
-            width: 100%;
-            height: 100%;
-            border-radius: 50%;
-            background: #22272e;
-            border: 6px solid #333;
-            color: #444;
-            font-size: 3rem;
-            cursor: pointer;
-            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            outline: none;
-        }
-
-        /* Estado Encendido (ON) */
-        .led-on {
-            color: #00ff88 !important;
-            border-color: #00ff88 !important;
-            background: #1a1d23 !important;
-            box-shadow: 0 0 30px rgba(0, 255, 136, 0.4), inset 0 0 15px rgba(0, 255, 136, 0.1);
-            text-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
-        }
-
-        #text-state {
-            font-size: 0.9rem;
-            letter-spacing: 1px;
-            font-weight: 600;
-            color: #555;
-            transition: 0.3s;
-        }
-    </style>
-</head>
-<body>
-
-<div class="card" id="login-section">
-    <h2 style="margin-bottom: 20px;">Acceso Sistema</h2>
-    <input type="text" id="user" placeholder="Usuario HiveMQ">
-    <input type="password" id="pass" placeholder="Contraseña">
-    <button class="btn-connect" onclick="connectMQTT()">INGRESAR</button>
-</div>
-
-<div class="card hidden" id="control-section">
-    <div id="conn-status" class="status offline">● DESCONECTADO</div>
-    
-    <div class="power-container">
-        <button id="btn-led" onclick="toggleLED()">⏻</button>
-    </div>
-
-    <p id="text-state">SISTEMA APAGADO</p>
-</div>
-
 <script>
     let client;
-    let ledStatus = false;
+    let alarmStatus = false;
+
+    // Cargar historial guardado al abrir la página
+    document.addEventListener('DOMContentLoaded', () => {
+        const savedHistory = JSON.parse(localStorage.getItem('alarma_historial')) || [];
+        const lista = document.getElementById('history-list');
+        savedHistory.forEach(item => {
+            const div = document.createElement('div');
+            div.className = 'history-item';
+            div.innerHTML = item;
+            lista.appendChild(div);
+        });
+    });
 
     function connectMQTT() {
         const user = document.getElementById('user').value;
         const pass = document.getElementById('pass').value;
 
         const options = {
-            username: user,
-            password: pass,
-            clientId: 'web_' + Math.random().toString(16).substr(2, 4),
+            username: user, password: pass,
+            clientId: 'web_alarm_' + Math.random().toString(16).substr(2, 4),
             clean: true
         };
 
-        // TU CLUSTER DE HIVEMQ CONFIGURADO
         const clusterUrl = 'wss://7340fcf31a5f4b45984049723fa706e8.s1.eu.hivemq.cloud:8884/mqtt';
-        
         client = mqtt.connect(clusterUrl, options);
 
         client.on('connect', () => {
             document.getElementById('login-section').classList.add('hidden');
             document.getElementById('control-section').classList.remove('hidden');
-            document.getElementById('conn-status').innerText = "● SISTEMA ONLINE";
+            document.getElementById('conn-status').innerText = "● PROTECCIÓN ACTIVA";
             document.getElementById('conn-status').className = "status online";
             
             client.subscribe('esp32/estado');
-            updateUI(); 
+            client.subscribe('esp32/alarma_activada');
         });
 
         client.on('message', (topic, message) => {
             if(topic === 'esp32/estado') {
-                ledStatus = (message.toString() === 'ON');
+                alarmStatus = (message.toString() === 'ON');
                 updateUI();
             }
-        });
-
-        client.on('error', () => {
-            alert("Credenciales incorrectas");
-            client.end();
+            if(topic === 'esp32/alarma_activada') {
+                agregarAlHistorial();
+            }
         });
     }
 
+    function agregarAlHistorial() {
+        const lista = document.getElementById('history-list');
+        const ahora = new Date();
+        const fechaHora = ahora.toLocaleDateString() + " " + ahora.toLocaleTimeString();
+        const textoHtml = `<span>⚠ DISPARO:</span> ${fechaHora}`;
+        
+        const nuevoRegistro = document.createElement('div');
+        nuevoRegistro.className = 'history-item';
+        nuevoRegistro.innerHTML = textoHtml;
+        
+        // Añadir al inicio de la lista visual
+        lista.insertBefore(nuevoRegistro, lista.firstChild);
+
+        // --- LÓGICA DE BASE DE DATOS LOCAL ---
+        let historial = JSON.parse(localStorage.getItem('alarma_historial')) || [];
+        historial.unshift(textoHtml); // Añade al inicio del array
+        if(historial.length > 10) historial.pop(); // Mantiene solo los últimos 10
+        localStorage.setItem('alarma_historial', JSON.stringify(historial));
+
+        // Limitar la lista visual a 10 elementos
+        while (lista.children.length > 10) {
+            lista.removeChild(lista.lastChild);
+        }
+    }
+
     function toggleLED() {
-        const command = ledStatus ? 'OFF' : 'ON';
+        const command = alarmStatus ? 'OFF' : 'ON';
         client.publish('esp32/comando', command, { qos: 1 });
     }
 
     function updateUI() {
         const btn = document.getElementById('btn-led');
         const txt = document.getElementById('text-state');
-        
-        if(ledStatus) {
+        if(alarmStatus) {
             btn.classList.add('led-on');
-            txt.innerText = "SISTEMA ENCENDIDO";
-            txt.style.color = "#00ff88";
+            txt.innerText = "SISTEMA ARMADO";
+            txt.style.color = "#ff4444";
         } else {
             btn.classList.remove('led-on');
-            txt.innerText = "SISTEMA APAGADO";
+            txt.innerText = "SISTEMA DESARMADO";
             txt.style.color = "#555";
         }
     }
 </script>
-</body>
-</html>
