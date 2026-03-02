@@ -3,179 +3,155 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistema de Alarma Pro</title>
+    <title>Sistema Alarma Inteligente v3.0</title>
     <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
     <style>
-        body { 
-            font-family: 'Segoe UI', sans-serif; 
-            background: #0f1115; 
-            color: white; 
-            display: flex; 
-            justify-content: center; 
-            align-items: center; 
-            min-height: 100vh; 
-            margin: 0; 
-        }
-        .card { 
-            background: #1a1d23; 
-            padding: 2rem; 
-            border-radius: 20px; 
-            box-shadow: 0 15px 35px rgba(0,0,0,0.7); 
-            width: 100%; 
-            max-width: 340px; 
-            text-align: center; 
-        }
+        body { font-family: 'Segoe UI', sans-serif; background: #0b0e14; color: white; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        .card { background: #1a1d23; padding: 25px; border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.8); width: 100%; max-width: 340px; text-align: center; }
         .hidden { display: none; }
-        
-        /* Login */
         input { width: 100%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 1px solid #333; background: #252a33; color: white; box-sizing: border-box; }
-        .btn-connect { width: 100%; background: #007bff; color: white; padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
-
-        /* Botón Circular */
-        .status { font-size: 0.7rem; font-weight: bold; letter-spacing: 1.5px; margin-bottom: 20px; text-transform: uppercase; }
-        .online { color: #00ff88; }
-        .offline { color: #ff4444; }
-
-        .power-container { margin: 30px auto; width: 120px; height: 120px; }
-        #btn-led {
-            width: 100%; height: 100%; border-radius: 50%; background: #22272e; border: 6px solid #333;
-            color: #444; font-size: 2.5rem; cursor: pointer; transition: all 0.4s ease;
-            display: flex; align-items: center; justify-content: center; outline: none;
-        }
-        .led-on { color: #ff4444 !important; border-color: #ff4444 !important; box-shadow: 0 0 30px rgba(255, 68, 68, 0.4); }
-
-        /* Historial con Scroll */
-        .history-container {
-            margin-top: 25px;
-            text-align: left;
-            background: #121418;
-            border-radius: 10px;
-            padding: 10px;
-            border: 1px solid #333;
-        }
-        .history-title { font-size: 0.75rem; color: #888; margin-bottom: 8px; display: flex; justify-content: space-between; }
-        #history-list { max-height: 120px; overflow-y: auto; }
-        .history-item { font-size: 0.7rem; padding: 6px 0; border-bottom: 1px solid #1a1d23; color: #bbb; display: flex; justify-content: space-between; }
-        .history-item span { color: #ff4444; font-weight: bold; margin-right: 5px; }
+        .btn-main { width: 100%; background: #007bff; color: white; padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 10px; }
         
-        /* Botón de limpiar */
-        .btn-clear { background: none; border: none; color: #555; cursor: pointer; font-size: 0.6rem; text-decoration: underline; }
+        /* Botón de Alarma */
+        .power-container { margin: 25px auto; width: 110px; height: 110px; }
+        #btn-alarm { width: 100%; height: 100%; border-radius: 50%; background: #222; border: 5px solid #333; color: #444; font-size: 2.5rem; cursor: pointer; transition: 0.4s; }
+        .alarm-on { color: #ff4444 !important; border-color: #ff4444 !important; box-shadow: 0 0 25px rgba(255, 68, 68, 0.5); }
+
+        /* Teclado Web */
+        .keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 15px 0; }
+        .keypad button { padding: 15px; background: #2c323c; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
+        .keypad button:active { background: #4a5568; }
+
+        /* Historial */
+        .history { margin-top: 20px; text-align: left; background: #121418; padding: 12px; border-radius: 10px; border: 1px solid #333; }
+        #logs { max-height: 110px; overflow-y: auto; font-size: 0.75rem; color: #bbb; }
+        .log-entry { margin-bottom: 5px; border-bottom: 1px solid #1f232b; padding-bottom: 3px; }
+        .log-entry span { color: #ff4444; font-weight: bold; }
     </style>
 </head>
 <body>
 
 <div class="card" id="login-section">
-    <h2 style="margin-bottom: 20px;">Seguridad IoT</h2>
-    <input type="text" id="user" placeholder="Usuario HiveMQ">
-    <input type="password" id="pass" placeholder="Contraseña">
-    <button class="btn-connect" onclick="connectMQTT()">INGRESAR AL PANEL</button>
+    <h2 style="margin-bottom: 10px;">Seguridad IoT</h2>
+    <p style="font-size: 0.8rem; color: #888;">Introduce tus credenciales</p>
+    <input type="text" id="my-name" placeholder="Tu Nombre (Ej: Jesus)">
+    <input type="text" id="mqtt-user" placeholder="Usuario HiveMQ">
+    <input type="password" id="mqtt-pass" placeholder="Contraseña HiveMQ">
+    <button class="btn-main" onclick="connectMQTT()">INGRESAR AL PANEL</button>
 </div>
 
-<div class="card hidden" id="control-section">
-    <div id="conn-status" class="status offline">● DESCONECTADO</div>
+<div class="card hidden" id="control-panel">
+    <div id="status" style="font-size: 0.7rem; color: #00ff88; margin-bottom: 10px;">● CONECTADO</div>
     
     <div class="power-container">
-        <button id="btn-led" onclick="toggleLED()">⏻</button>
+        <button id="btn-alarm" onclick="handleAlarmClick()">⏻</button>
+    </div>
+    <p id="alarm-info" style="font-size: 0.9rem; font-weight: bold; color: #555;">SISTEMA APAGADO</p>
+
+    <div id="keypad-area" class="hidden">
+        <p style="font-size: 0.7rem; color: #ff4444;">Introduce la clave de 6 dígitos:</p>
+        <div class="keypad">
+            <button onclick="addNum('1')">1</button>
+            <button onclick="addNum('2')">2</button>
+            <button onclick="addNum('3')">3</button>
+        </div>
+        <button onclick="clearCode()" style="background:none; border:none; color:#777; font-size:0.7rem; cursor:pointer; text-decoration:underline;">Borrar</button>
     </div>
 
-    <p id="text-state" style="font-size: 0.8rem; margin-bottom: 5px;">SISTEMA APAGADO</p>
+    <div class="history">
+        <div style="font-size: 0.7rem; color: #555; margin-bottom: 8px;">ÚLTIMOS MOVIMIENTOS</div>
+        <div id="logs"></div>
+    </div>
 
-    <div class="history-container">
-        <div class="history-title">
-            <span>ÚLTIMOS 10 REGISTROS</span>
-            <button class="btn-clear" onclick="clearHistory()">Borrar</button>
-        </div>
-        <div id="history-list">
-            </div>
+    <div style="margin-top: 20px; border-top: 1px solid #333; padding-top: 10px;">
+        <input type="text" id="new-pin" placeholder="Nuevo PIN (6 dígitos)" style="font-size: 0.7rem; width: 70%;">
+        <button onclick="changePIN()" style="font-size: 0.7rem; padding: 5px;">Set</button>
     </div>
 </div>
 
 <script>
-    let client;
-    let alarmStatus = false;
+    let client, myUser, inputCode = "", isAlarmOn = false;
 
-    // 1. CARGAR HISTORIAL AL INICIAR
-    document.addEventListener('DOMContentLoaded', () => {
-        renderHistory();
-    });
+    // Cargar historial al abrir
+    document.addEventListener('DOMContentLoaded', renderLogs);
 
     function connectMQTT() {
-        const user = document.getElementById('user').value;
-        const pass = document.getElementById('pass').value;
+        myUser = document.getElementById('my-name').value || "Invitado";
+        const u = document.getElementById('mqtt-user').value;
+        const p = document.getElementById('mqtt-pass').value;
 
-        const options = {
-            username: user, password: pass,
-            clientId: 'web_alarm_' + Math.random().toString(16).substr(2, 4),
-            clean: true
-        };
-
-        const clusterUrl = 'wss://7340fcf31a5f4b45984049723fa706e8.s1.eu.hivemq.cloud:8884/mqtt';
-        client = mqtt.connect(clusterUrl, options);
+        client = mqtt.connect('wss://7340fcf31a5f4b45984049723fa706e8.s1.eu.hivemq.cloud:8884/mqtt', {
+            username: u, password: p, clientId: 'web_' + Math.random().toString(16).substr(2, 4)
+        });
 
         client.on('connect', () => {
             document.getElementById('login-section').classList.add('hidden');
-            document.getElementById('control-section').classList.remove('hidden');
-            document.getElementById('conn-status').innerText = "● PROTECCIÓN ACTIVA";
-            document.getElementById('conn-status').className = "status online";
+            document.getElementById('control-panel').classList.remove('hidden');
             client.subscribe('esp32/estado');
-            client.subscribe('esp32/alarma_activada');
+            client.subscribe('esp32/alertas');
         });
 
-        client.on('message', (topic, message) => {
+        client.on('message', (topic, msg) => {
+            const m = msg.toString();
             if(topic === 'esp32/estado') {
-                alarmStatus = (message.toString() === 'ON');
-                updateUI();
+                isAlarmOn = m.startsWith("ON");
+                updateUI(m);
             }
-            if(topic === 'esp32/alarma_activada') {
-                saveToDB();
-            }
+            if(topic === 'esp32/alertas') saveLog(m);
         });
-
-        client.on('error', () => alert("Credenciales incorrectas"));
     }
 
-    // 2. GUARDAR EN "BASE DE DATOS" LOCAL
-    function saveToDB() {
-        const ahora = new Date();
-        const fechaHora = ahora.toLocaleDateString() + " " + ahora.toLocaleTimeString();
-        const registro = `<span>⚠ DISPARO</span> ${fechaHora}`;
-
-        let historial = JSON.parse(localStorage.getItem('alarma_db')) || [];
-        historial.unshift(registro); // Nuevo arriba
-        if(historial.length > 10) historial.pop(); // Solo 10
-        
-        localStorage.setItem('alarma_db', JSON.stringify(historial));
-        renderHistory();
-    }
-
-    function renderHistory() {
-        const lista = document.getElementById('history-list');
-        const historial = JSON.parse(localStorage.getItem('alarma_db')) || [];
-        lista.innerHTML = historial.map(item => `<div class="history-item">${item}</div>`).join('');
-    }
-
-    function clearHistory() {
-        localStorage.removeItem('alarma_db');
-        renderHistory();
-    }
-
-    function toggleLED() {
-        const command = alarmStatus ? 'OFF' : 'ON';
-        client.publish('esp32/comando', command, { qos: 1 });
-    }
-
-    function updateUI() {
-        const btn = document.getElementById('btn-led');
-        const txt = document.getElementById('text-state');
-        if(alarmStatus) {
-            btn.classList.add('led-on');
-            txt.innerText = "SISTEMA ARMADO";
-            txt.style.color = "#ff4444";
+    function handleAlarmClick() {
+        if(!isAlarmOn) {
+            client.publish('esp32/comando', `ON:${myUser}`);
         } else {
-            btn.classList.remove('led-on');
-            txt.innerText = "SISTEMA DESARMADO";
-            txt.style.color = "#555";
+            document.getElementById('keypad-area').classList.toggle('hidden');
         }
+    }
+
+    function addNum(n) {
+        inputCode += n;
+        if(inputCode.length === 6) {
+            client.publish('esp32/comando', `OFF:${myUser}:${inputCode}`);
+            inputCode = "";
+            document.getElementById('keypad-area').classList.add('hidden');
+        }
+    }
+
+    function clearCode() { inputCode = ""; }
+
+    function changePIN() {
+        const pin = document.getElementById('new-pin').value;
+        if(pin.length === 6) client.publish('esp32/comando', `CONFIG:${pin}`);
+        else alert("Debe tener 6 dígitos");
+    }
+
+    function updateUI(state) {
+        const btn = document.getElementById('btn-alarm');
+        const info = document.getElementById('alarm-info');
+        if(state.startsWith("ON")) {
+            btn.classList.add('alarm-on');
+            info.innerText = "ACTIVADA POR: " + state.split(":")[1];
+            info.style.color = "#ff4444";
+        } else {
+            btn.classList.remove('alarm-on');
+            info.innerText = "SISTEMA ARMADO";
+            info.style.color = "#555";
+        }
+    }
+
+    function saveLog(msg) {
+        let history = JSON.parse(localStorage.getItem('alarm_db')) || [];
+        const time = new Date().toLocaleTimeString();
+        history.unshift(`[${time}] ${msg}`);
+        if(history.length > 10) history.pop();
+        localStorage.setItem('alarm_db', JSON.stringify(history));
+        renderLogs();
+    }
+
+    function renderLogs() {
+        const history = JSON.parse(localStorage.getItem('alarm_db')) || [];
+        document.getElementById('logs').innerHTML = history.map(h => `<div class="log-entry">${h}</div>`).join('');
     }
 </script>
 </body>
