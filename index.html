@@ -1,158 +1,75 @@
 <!DOCTYPE html>
-<html lang="es">
-<head> 
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistema Alarma /title>
-    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+<html>
+<head>
+    <title>Panel de Control Alarma</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js" type="text/javascript"></script>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #0b0e14; color: white; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
-        .card { background: #1a1d23; padding: 25px; border-radius: 20px; box-shadow: 0 15px 35px rgba(0,0,0,0.8); width: 100%; max-width: 340px; text-align: center; }
-        .hidden { display: none; }
-        input { width: 100%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 1px solid #333; background: #252a33; color: white; box-sizing: border-box; }
-        .btn-main { width: 100%; background: #007bff; color: white; padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 10px; }
-        
-        /* Botón de Alarma */
-        .power-container { margin: 25px auto; width: 110px; height: 110px; }
-        #btn-alarm { width: 100%; height: 100%; border-radius: 50%; background: #222; border: 5px solid #333; color: #444; font-size: 2.5rem; cursor: pointer; transition: 0.4s; }
-        .alarm-on { color: #ff4444 !important; border-color: #ff4444 !important; box-shadow: 0 0 25px rgba(255, 68, 68, 0.5); }
-
-        /* Teclado Web */
-        .keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 15px 0; }
-        .keypad button { padding: 15px; background: #2c323c; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
-        .keypad button:active { background: #4a5568; }
-
-        /* Historial */
-        .history { margin-top: 20px; text-align: left; background: #121418; padding: 12px; border-radius: 10px; border: 1px solid #333; }
-        #logs { max-height: 110px; overflow-y: auto; font-size: 0.75rem; color: #bbb; }
-        .log-entry { margin-bottom: 5px; border-bottom: 1px solid #1f232b; padding-bottom: 3px; }
-        .log-entry span { color: #ff4444; font-weight: bold; }
+        body { font-family: sans-serif; background: #121212; color: white; text-align: center; }
+        .card { background: #1e1e1e; border-radius: 15px; padding: 20px; display: inline-block; margin-top: 50px; border: 1px solid #333; }
+        .btn-on { background: #27ae60; color: white; padding: 15px; border: none; border-radius: 5px; cursor: pointer; }
+        .btn-off { background: #c0392b; color: white; padding: 15px; border: none; border-radius: 5px; cursor: pointer; }
+        #status { font-size: 24px; margin: 20px; font-weight: bold; }
+        .alerta { color: #f1c40f; animation: blink 1s infinite; }
     </style>
 </head>
 <body>
-
-<div class="card" id="login-section">
-    <h2 style="margin-bottom: 10px;">Seguridad IoT</h2>
-    <p style="font-size: 0.8rem; color: #888;">Introduce tus credenciales</p>
-    <input type="text" id="my-name" placeholder="Tu Nombre (Ej: Jesus)">
-    <input type="text" id="mqtt-user" placeholder="Usuario HiveMQ">
-    <input type="password" id="mqtt-pass" placeholder="Contraseña HiveMQ">
-    <button class="btn-main" onclick="connectMQTT()">INGRESAR AL PANEL</button>
-</div>
-
-<div class="card hidden" id="control-panel">
-    <div id="status" style="font-size: 0.7rem; color: #00ff88; margin-bottom: 10px;">● CONECTADO</div>
-    
-    <div class="power-container">
-        <button id="btn-alarm" onclick="handleAlarmClick()">⏻</button>
-    </div>
-    <p id="alarm-info" style="font-size: 0.9rem; font-weight: bold; color: #555;">SISTEMA APAGADO</p>
-
-    <div id="keypad-area" class="hidden">
-        <p style="font-size: 0.7rem; color: #ff4444;">Introduce la clave de 6 dígitos:</p>
-        <div class="keypad">
-            <button onclick="addNum('1')">1</button>
-            <button onclick="addNum('2')">2</button>
-            <button onclick="addNum('3')">3</button>
-        </div>
-        <button onclick="clearCode()" style="background:none; border:none; color:#777; font-size:0.7rem; cursor:pointer; text-decoration:underline;">Borrar</button>
+    <div class="card">
+        <h1>🛡️ Mi Alarma Láser</h1>
+        <div id="status">ESTADO: DESCONECTADO</div>
+        <p>Distancia: <span id="dist">---</span> mm</p>
+        <button class="btn-on" onclick="enviar('ON')">ARMAR SISTEMA</button>
+        <button class="btn-off" onclick="enviar('OFF')">DESARMAR / RESET</button>
     </div>
 
-    <div class="history">
-        <div style="font-size: 0.7rem; color: #555; margin-bottom: 8px;">ÚLTIMOS MOVIMIENTOS</div>
-        <div id="logs"></div>
-    </div>
+    <script>
+        // --- CONFIGURA TUS DATOS AQUÍ ---
+        const host = "7340fcf31a5f4b45984049723fa706e8.s1.eu.hivemq.cloud";
+        const port = 8884; // PUERTO PARA NAVEGADOR (WSS) ES 8884
+        const user = "TU_USUARIO";
+        const pass = "TU_PASSWORD";
+        const clientId = "web_client_" + Math.random().toString(16).substr(2, 8);
 
-    <div style="margin-top: 20px; border-top: 1px solid #333; padding-top: 10px;">
-        <input type="text" id="new-pin" placeholder="Nuevo PIN (6 dígitos)" style="font-size: 0.7rem; width: 70%;">
-        <button onclick="changePIN()" style="font-size: 0.7rem; padding: 5px;">Set</button>
-    </div>
-</div>
+        client = new Paho.MQTT.Client(host, port, clientId);
 
-<script>
-    let client, myUser, inputCode = "", isAlarmOn = false;
+        client.onConnectionLost = onConnectionLost;
+        client.onMessageArrived = onMessageArrived;
 
-    // Cargar historial al abrir
-    document.addEventListener('DOMContentLoaded', renderLogs);
+        const options = {
+            useSSL: true,
+            userName: user,
+            password: pass,
+            onSuccess: onConnect,
+            onFailure: (err) => { console.log("Fallo:", err); }
+        };
 
-    function connectMQTT() {
-        myUser = document.getElementById('my-name').value || "Invitado";
-        const u = document.getElementById('mqtt-user').value;
-        const p = document.getElementById('mqtt-pass').value;
+        client.connect(options);
 
-        client = mqtt.connect('wss://7340fcf31a5f4b45984049723fa706e8.s1.eu.hivemq.cloud:8884/mqtt', {
-            username: u, password: p, clientId: 'web_' + Math.random().toString(16).substr(2, 4)
-        });
+        function onConnect() {
+            console.log("Conectado a HiveMQ");
+            document.getElementById("status").innerText = "CONECTADO A LA NUBE";
+            client.subscribe("esp32/distancia");
+            client.subscribe("esp32/estado");
+            client.subscribe("esp32/alarma_activada");
+        }
 
-        client.on('connect', () => {
-            document.getElementById('login-section').classList.add('hidden');
-            document.getElementById('control-panel').classList.remove('hidden');
-            client.subscribe('esp32/estado');
-            client.subscribe('esp32/alertas');
-        });
+        function onConnectionLost(responseObject) {
+            document.getElementById("status").innerText = "CONEXIÓN PERDIDA";
+        }
 
-        client.on('message', (topic, msg) => {
-            const m = msg.toString();
-            if(topic === 'esp32/estado') {
-                isAlarmOn = m.startsWith("ON");
-                updateUI(m);
+        function onMessageArrived(message) {
+            if (message.destinationName == "esp32/distancia") {
+                document.getElementById("dist").innerText = message.payloadString;
             }
-            if(topic === 'esp32/alertas') saveLog(m);
-        });
-    }
-
-    function handleAlarmClick() {
-        if(!isAlarmOn) {
-            client.publish('esp32/comando', `ON:${myUser}`);
-        } else {
-            document.getElementById('keypad-area').classList.toggle('hidden');
+            if (message.destinationName == "esp32/estado") {
+                document.getElementById("status").innerText = message.payloadString;
+            }
         }
-    }
 
-    function addNum(n) {
-        inputCode += n;
-        if(inputCode.length === 6) {
-            client.publish('esp32/comando', `OFF:${myUser}:${inputCode}`);
-            inputCode = "";
-            document.getElementById('keypad-area').classList.add('hidden');
+        function enviar(msg) {
+            let message = new Paho.MQTT.Message(msg);
+            message.destinationName = "esp32/comando";
+            client.send(message);
         }
-    }
-
-    function clearCode() { inputCode = ""; }
-
-    function changePIN() {
-        const pin = document.getElementById('new-pin').value;
-        if(pin.length === 6) client.publish('esp32/comando', `CONFIG:${pin}`);
-        else alert("Debe tener 6 dígitos");
-    }
-
-    function updateUI(state) {
-        const btn = document.getElementById('btn-alarm');
-        const info = document.getElementById('alarm-info');
-        if(state.startsWith("ON")) {
-            btn.classList.add('alarm-on');
-            info.innerText = "ACTIVADA POR: " + state.split(":")[1];
-            info.style.color = "#ff4444";
-        } else {
-            btn.classList.remove('alarm-on');
-            info.innerText = "SISTEMA ARMADO";
-            info.style.color = "#555";
-        }
-    }
-
-    function saveLog(msg) {
-        let history = JSON.parse(localStorage.getItem('alarm_db')) || [];
-        const time = new Date().toLocaleTimeString();
-        history.unshift(`[${time}] ${msg}`);
-        if(history.length > 10) history.pop();
-        localStorage.setItem('alarm_db', JSON.stringify(history));
-        renderLogs();
-    }
-
-    function renderLogs() {
-        const history = JSON.parse(localStorage.getItem('alarm_db')) || [];
-        document.getElementById('logs').innerHTML = history.map(h => `<div class="log-entry">${h}</div>`).join('');
-    }
-</script>
+    </script>
 </body>
 </html>
