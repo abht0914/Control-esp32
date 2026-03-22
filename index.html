@@ -1,77 +1,49 @@
 <!DOCTYPE html>
-<html lang="es">
+<html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Control de Alarma Láser</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js" type="text/javascript"></script>
-    
+    <title>Control Alarma</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
     <style>
-        body { font-family: 'Arial', sans-serif; background-color: #121212; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .panel { background-color: #1e1e1e; padding: 30px; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); text-align: center; width: 300px; }
-        h1 { font-size: 1.5rem; color: #00ff88; }
-        .status-box { margin: 20px 0; padding: 15px; border-radius: 10px; background: #2a2a2a; font-weight: bold; }
-        .btn { width: 100%; padding: 15px; margin: 10px 0; border: none; border-radius: 10px; cursor: pointer; font-weight: bold; transition: 0.3s; }
-        .btn-on { background-color: #27ae60; color: white; }
-        .btn-off { background-color: #e74c3c; color: white; }
-        .btn:active { transform: scale(0.95); }
+        body { background: #121212; color: white; text-align: center; font-family: sans-serif; padding-top: 50px; }
+        .box { border: 2px solid #00ff88; display: inline-block; padding: 20px; border-radius: 15px; }
+        button { padding: 10px 20px; margin: 10px; cursor: pointer; font-weight: bold; border-radius: 5px; border: none; }
+        .on { background: #27ae60; color: white; }
+        .off { background: #e74c3c; color: white; }
     </style>
 </head>
 <body>
-
-    <div class="panel">
-        <h1>🛡️ SECURITY PANEL</h1>
-        <div id="status" class="status-box">CONECTANDO...</div>
-        <div class="status-box">DISTANCIA: <span id="dist">0</span> mm</div>
-        
-        <button class="btn btn-on" onclick="publicar('ON')">ARMAR SISTEMA</button>
-        <button class="btn btn-off" onclick="publicar('OFF')">DESARMAR / RESET</button>
+    <div class="box">
+        <h1>🛡️ SISTEMA LÁSER</h1>
+        <p id="stat">ESTADO: CONECTANDO...</p>
+        <p>Distancia: <span id="dist">0</span> mm</p>
+        <button class="on" onclick="enviar('ON')">ARMAR</button>
+        <button class="off" onclick="enviar('OFF')">DESARMAR</button>
     </div>
 
     <script>
-        // --- DATOS DE TU CLUSTER ---
-        const host = "7340fcf31a5f4b45984049723fa706e8.s1.eu.hivemq.cloud";
-        const port = 8884; // IMPORTANTE: 8884 para Web
-        const user = "TU_USER_DE_ACCESS"; // Cámbialo por el de Access Management
-        const pass = "TU_PASS_DE_ACCESS"; // Cámbialo por el de Access Management
+        const client = new Paho.MQTT.Client("7340fcf31a5f4b45984049723fa706e8.s1.eu.hivemq.cloud", 8884, "web_" + Math.random().toString(16).substr(2, 8));
         
-        const clientId = "web_" + Math.random().toString(16).substr(2, 8);
-        const client = new Paho.MQTT.Client(host, port, clientId);
-
-        client.onConnectionLost = (obj) => { 
-            document.getElementById("status").innerHTML = "❌ DESCONECTADO";
-            document.getElementById("status").style.color = "red";
-        };
-
         client.onMessageArrived = (msg) => {
-            if (msg.destinationName === "esp32/distancia") {
-                document.getElementById("dist").innerText = msg.payloadString;
-            }
-            if (msg.destinationName === "esp32/estado") {
-                document.getElementById("status").innerText = msg.payloadString;
-                document.getElementById("status").style.color = "#00ff88";
-            }
+            if (msg.destinationName == "esp32/distancia") document.getElementById("dist").innerText = msg.payloadString;
+            if (msg.destinationName == "esp32/estado") document.getElementById("stat").innerText = "ESTADO: " + msg.payloadString;
         };
 
-        const opciones = {
+        client.connect({
             useSSL: true,
-            userName: user,
-            password: pass,
+            userName: "TU_USUARIO", // PON TU USUARIO DE ACCESS MANAGEMENT
+            password: "TU_PASSWORD", // PON TU PASSWORD DE ACCESS MANAGEMENT
             onSuccess: () => {
-                console.log("Conectado");
-                document.getElementById("status").innerHTML = "✅ EN LÍNEA";
+                document.getElementById("stat").innerText = "ESTADO: CONECTADO";
                 client.subscribe("esp32/distancia");
                 client.subscribe("esp32/estado");
-            },
-            onFailure: (e) => { console.log("Error:", e); }
-        };
+            }
+        });
 
-        client.connect(opciones);
-
-        function publicar(comando) {
-            const message = new Paho.MQTT.Message(comando);
-            message.destinationName = "esp32/comando";
-            client.send(message);
+        function enviar(val) {
+            let m = new Paho.MQTT.Message(val);
+            m.destinationName = "esp32/comando";
+            client.send(m);
         }
     </script>
 </body>
