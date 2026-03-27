@@ -59,7 +59,7 @@
         </div>
 
         <div class="card">
-            <h4>Historial (Últimos 10 Eventos)</h4>
+            <h4>Historial de Actividad</h4>
             <ul id="logList"><li>Esperando datos...</li></ul>
             <button class="clear-btn" onclick="borrarHistorial()">Limpiar historial local</button>
         </div>
@@ -83,37 +83,36 @@
         }
 
         function login() {
-            user = document.getElementById("u").value;
-            let pass = document.getElementById("p").value;
+            user = document.getElementById("u").value.trim();
+            let pass = document.getElementById("p").value.trim();
             if(!user || !pass) return;
 
-            // Identificador único para evitar conflictos
+            // Identificador único para evitar conflictos entre múltiples pestañas
             const clientId = "web_client_" + Math.random().toString(16).substr(2, 5);
             mqtt = new Paho.MQTT.Client(host, 8884, clientId);
             
             mqtt.onMessageArrived = (m) => {
-                // Actualizar Distancia
+                // 1. Actualizar Distancia
                 if(m.destinationName == "esp32/distancia") {
                     document.getElementById("dist").innerText = m.payloadString + " mm";
                 }
                 
-                // Actualizar Estado (Retenido)
+                // 2. Actualizar Estado General
                 if(m.destinationName == "esp32/estado") {
                     document.getElementById("stat").innerText = m.payloadString;
                 }
 
-                // Manejar Historial de Logs
+                // 3. Manejar Historial de Logs (Quién hizo qué)
                 if(m.destinationName == "esp32/log") {
-                    const mensajeRecibido = m.payloadString;
+                    const mensajeRecibido = m.payloadString; // Formato esperado "Nombre: Accion"
                     const timestamp = new Date().toLocaleTimeString();
-                    const nuevoLog = `${timestamp} - ${mensajeRecibido}`;
+                    const nuevoLog = `[${timestamp}] ${mensajeRecibido}`;
 
-                    // Evitar duplicar el mismo mensaje si es un mensaje retenido antiguo
-                    if (logs.length === 0 || !logs[0].includes(mensajeRecibido)) {
+                    // Evitar duplicar el mismo mensaje si el servidor MQTT envía el mensaje retenido al conectar
+                    if (logs.length === 0 || logs[0].indexOf(mensajeRecibido) === -1) {
                         logs.unshift(nuevoLog);
-                        if(logs.length > 10) logs.pop();
+                        if(logs.length > 10) logs.pop(); // Mantener solo los últimos 10
                         
-                        // Guardar permanentemente en el navegador
                         localStorage.setItem("historial_seguridad", JSON.stringify(logs));
                         renderizarLogs();
                     }
@@ -121,9 +120,11 @@
             };
 
             mqtt.connect({
-                useSSL: true, userName: user, password: pass,
+                useSSL: true, 
+                userName: user, 
+                password: pass,
                 onSuccess: () => {
-                    document.getElementById("login-box").className = "hidden";
+                    document.getElementById("login-box").classList.add("hidden");
                     document.getElementById("main-panel").classList.remove("hidden");
                     document.getElementById("user-tag").innerText = "OPERADOR: " + user.toUpperCase();
                     renderizarLogs();
@@ -132,15 +133,17 @@
                     mqtt.subscribe("esp32/log");
                     mqtt.subscribe("esp32/estado");
                 },
-                onFailure: () => { 
-                    document.getElementById("err").innerText = "❌ Acceso Denegado: Credenciales Inválidas"; 
+                onFailure: (e) => { 
+                    console.log(e);
+                    document.getElementById("err").innerText = "❌ Credenciales o conexión fallida"; 
                 }
             });
         }
 
         function enviar(acc) {
             if(!mqtt || !mqtt.isConnected()) return;
-            // Enviamos "Usuario:COMANDO" para que el ESP32 sepa quién lo hizo
+            // El formato enviado es "Usuario:COMANDO"
+            // El ESP32 debe procesar esto y devolver la confirmación por "esp32/log"
             let m = new Paho.MQTT.Message(user + ":" + acc);
             m.destinationName = "esp32/comando";
             mqtt.send(m);
