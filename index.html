@@ -3,170 +3,96 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Security Hub - ESP32</title>
+    <title>Panel de Seguridad Pro</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
     <style>
-        :root {
-            --bg: #0f172a; --card: #1e293b; --text: #f8fafc;
-            --primary: #3b82f6; --success: #10b981; --warning: #f59e0b; --danger: #ef4444;
-        }
-
-        body { background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; transition: background 0.5s; }
+        :root { --bg: #0f172a; --card: #1e293b; --acc: #3b82f6; }
+        body { background: var(--bg); color: white; font-family: sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; transition: 0.3s; }
+        .alarm-bg { background: #450a0a !important; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
+        
+        .container { width: 90%; max-width: 400px; }
+        .card { background: var(--card); padding: 20px; border-radius: 15px; border: 1px solid #334155; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        
+        input { width: 100%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: white; box-sizing: border-box; }
+        .btn { width: 100%; padding: 15px; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; margin-top: 10px; transition: 0.2s; }
+        .btn-main { background: var(--acc); color: white; }
+        .btn-arm { background: #10b981; color: white; }
+        .btn-panic { background: #f59e0b; color: white; }
+        .btn-off { background: #ef4444; color: white; }
+        
+        #dist { font-size: 4rem; font-weight: bold; color: #10b981; margin: 10px 0; }
+        #logList { list-style: none; padding: 0; max-height: 150px; overflow-y: auto; text-align: left; font-size: 0.8rem; background: #0f172a; border-radius: 8px; }
+        li { padding: 8px; border-bottom: 1px solid #1e293b; color: #94a3b8; }
         .hidden { display: none !important; }
-
-        /* Login */
-        #login-box { background: var(--card); padding: 2rem; border-radius: 1rem; width: 100%; max-width: 350px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.3); border: 1px solid #334155; }
-        
-        /* Dashboard */
-        #main-panel { width: 95%; max-width: 600px; display: grid; gap: 1rem; padding: 1rem; }
-        .card { background: var(--card); padding: 1.5rem; border-radius: 1rem; border: 1px solid #334155; position: relative; overflow: hidden; }
-        
-        /* Status Badges */
-        .badge { display: inline-block; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; margin-bottom: 0.5rem; }
-        .badge-online { background: rgba(16, 185, 129, 0.2); color: var(--success); }
-        .badge-offline { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
-
-        /* Pantalla de datos */
-        #dist { font-size: 4rem; font-weight: 800; color: var(--success); text-shadow: 0 0 20px rgba(16, 185, 129, 0.3); margin: 0.5rem 0; }
-        #stat { font-size: 1.1rem; color: var(--warning); font-weight: 600; }
-
-        /* Botones */
-        .grid-buttons { display: grid; grid-template-columns: 1fr; gap: 0.75rem; margin-top: 1.5rem; }
-        .btn { border: none; padding: 1rem; border-radius: 0.75rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; transition: all 0.2s; color: white; }
-        .btn:active { transform: scale(0.98); }
-        .btn-arm { background: var(--success); }
-        .btn-panic { background: var(--warning); }
-        .btn-off { background: var(--danger); }
-        
-        /* Historial Mejorado */
-        ul { list-style: none; padding: 0; margin: 0; max-height: 180px; overflow-y: auto; text-align: left; }
-        li { padding: 0.75rem; border-bottom: 1px solid #334155; font-size: 0.85rem; display: flex; justify-content: space-between; }
-        .ts { color: #64748b; font-family: monospace; }
-
-        /* Animación de Alarma Disparada */
-        .alarm-active { background: #450a0a !important; animation: blink-bg 1s infinite; }
-        @keyframes blink-bg { 0%, 100% { opacity: 1; } 50% { opacity: 0.8; } }
     </style>
 </head>
 <body>
 
-    <div id="login-box">
-        <h2 style="text-align:center; margin-top:0;">🛡️ Security Login</h2>
-        <input type="text" id="u" placeholder="Usuario HiveMQ" style="width:100%; padding:12px; margin:8px 0; border-radius:8px; border:1px solid #334155; background:#0f172a; color:white;">
-        <input type="password" id="p" placeholder="Contraseña" style="width:100%; padding:12px; margin:8px 0; border-radius:8px; border:1px solid #334155; background:#0f172a; color:white;">
-        <button class="btn btn-arm" onclick="login()" style="width:100%; margin-top:1rem;">CONECTAR SISTEMA</button>
-        <p id="err" style="color: var(--danger); font-size: 0.8rem; text-align: center; margin-top: 10px;"></p>
-    </div>
-
-    <div id="main-panel" class="hidden">
-        <div class="card" id="status-card">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-                <div>
-                    <span id="conn-tag" class="badge badge-offline">Desconectado</span>
-                    <div id="user-tag" style="font-size: 0.8rem; color: #94a3b8;">---</div>
-                </div>
-                <div id="stat">ESPERANDO...</div>
-            </div>
-            
-            <div style="text-align: center;">
-                <div id="dist">--</div>
-                <span style="color: #64748b; font-size: 0.9rem;">Distancia actual (Laser)</span>
-            </div>
-
-            <div class="grid-buttons">
-                <button class="btn btn-arm" onclick="enviar('ARMAR', this)">🛡️ Armar Vigilancia</button>
-                <button class="btn btn-panic" onclick="enviar('ACTIVAR', this)">🚨 Pánico Manual</button>
-                <button class="btn btn-off" onclick="enviar('APAGAR', this)">✖️ Desactivar Sistema</button>
-            </div>
+    <div class="container">
+        <div id="login" class="card">
+            <h2>🔐 Acceso</h2>
+            <input type="text" id="u" placeholder="Usuario HiveMQ">
+            <input type="password" id="p" placeholder="Contraseña">
+            <button class="btn btn-main" onclick="conectar()">ENTRAR</button>
         </div>
 
-        <div class="card">
-            <h4 style="margin:0 0 1rem 0;">📋 Historial de Eventos</h4>
+        <div id="panel" class="card hidden">
+            <div id="status" style="color:#94a3b8; font-weight: bold;">CONECTADO</div>
+            <div id="dist">0 mm</div>
+            <div id="state-txt" style="margin-bottom: 20px; font-weight: bold;">Sincronizando...</div>
+            
+            <button class="btn btn-arm" onclick="enviar('ARMAR')">🛡️ ARMAR</button>
+            <button class="btn btn-panic" onclick="enviar('ACTIVAR')">🚨 PÁNICO</button>
+            <button class="btn btn-off" onclick="enviar('APAGAR')">✖️ DESACTIVAR</button>
+
+            <h4 style="text-align: left; margin: 20px 0 10px 0; color: #64748b;">REGISTROS:</h4>
             <ul id="logList"></ul>
-            <button onclick="borrarHistorial()" style="background:none; border:none; color:#64748b; text-decoration:underline; font-size:0.7rem; cursor:pointer; margin-top:10px;">Limpiar memoria local</button>
         </div>
     </div>
 
     <script>
-        let mqtt;
+        let client;
         let user;
-        const host = "7340fcf31a5f4b45984049723fa706e8.s1.eu.hivemq.cloud";
-        let logs = JSON.parse(localStorage.getItem("hist_v2")) || [];
 
-        function renderizarLogs() {
-            const list = document.getElementById("logList");
-            list.innerHTML = logs.map(l => `<li><span>${l.m}</span><span class="ts">${l.t}</span></li>`).join("");
-        }
+        function conectar() {
+            user = document.getElementById('u').value;
+            let pass = document.getElementById('p').value;
+            const cid = "web_" + Math.random().toString(16).substr(2,4);
+            client = new Paho.MQTT.Client("7340fcf31a5f4b45984049723fa706e8.s1.eu.hivemq.cloud", 8884, cid);
 
-        function login() {
-            user = document.getElementById("u").value.trim();
-            let pass = document.getElementById("p").value.trim();
-            if(!user || !pass) return;
-
-            const clientId = "web_" + Math.random().toString(16).substr(2, 4);
-            mqtt = new Paho.MQTT.Client(host, 8884, clientId);
-            
-            mqtt.onConnectionLost = () => {
-                document.getElementById("conn-tag").className = "badge badge-offline";
-                document.getElementById("conn-tag").innerText = "RECONECTANDO...";
-            };
-
-            mqtt.onMessageArrived = (m) => {
-                if(m.destinationName == "esp32/distancia") document.getElementById("dist").innerText = m.payloadString + "mm";
-                
+            client.onMessageArrived = (m) => {
+                if(m.destinationName == "esp32/distancia") document.getElementById('dist').innerText = m.payloadString + " mm";
                 if(m.destinationName == "esp32/estado") {
-                    const status = m.payloadString;
-                    document.getElementById("stat").innerText = status;
-                    // Alarma visual
-                    if(status.includes("ALARMA")) document.body.classList.add("alarm-active");
-                    else document.body.classList.remove("alarm-active");
+                    document.getElementById('state-txt').innerText = m.payloadString;
+                    if(m.payloadString.includes("ALARMA")) document.body.classList.add('alarm-bg');
+                    else document.body.classList.remove('alarm-bg');
                 }
-
                 if(m.destinationName == "esp32/log") {
-                    logs.unshift({m: m.payloadString, t: new Date().toLocaleTimeString()});
-                    if(logs.length > 15) logs.pop();
-                    localStorage.setItem("hist_v2", JSON.stringify(logs));
-                    renderizarLogs();
+                    const li = document.createElement('li');
+                    li.innerText = `[${new Date().toLocaleTimeString()}] ${m.payloadString}`;
+                    const list = document.getElementById('logList');
+                    list.insertBefore(li, list.firstChild);
                 }
             };
 
-            mqtt.connect({
+            client.connect({
                 useSSL: true, userName: user, password: pass,
                 onSuccess: () => {
-                    document.getElementById("login-box").classList.add("hidden");
-                    document.getElementById("main-panel").classList.remove("hidden");
-                    document.getElementById("user-tag").innerText = "OPERADOR: " + user;
-                    document.getElementById("conn-tag").className = "badge badge-online";
-                    document.getElementById("conn-tag").innerText = "EN LÍNEA";
-                    renderizarLogs();
-                    mqtt.subscribe("esp32/distancia");
-                    mqtt.subscribe("esp32/log");
-                    mqtt.subscribe("esp32/estado");
+                    document.getElementById('login').classList.add('hidden');
+                    document.getElementById('panel').classList.remove('hidden');
+                    client.subscribe("esp32/distancia");
+                    client.subscribe("esp32/estado");
+                    client.subscribe("esp32/log");
                 },
-                onFailure: () => { document.getElementById("err").innerText = "❌ Error de conexión"; }
+                onFailure: () => alert("Credenciales incorrectas")
             });
         }
 
-        function enviar(acc, btn) {
-            if(!mqtt || !mqtt.isConnected()) return;
-            const originalText = btn.innerText;
-            btn.innerText = "Enviando...";
-            btn.disabled = true;
-
-            let m = new Paho.MQTT.Message(user + ":" + acc);
+        function enviar(cmd) {
+            let m = new Paho.MQTT.Message(user + ":" + cmd);
             m.destinationName = "esp32/comando";
-            mqtt.send(m);
-
-            setTimeout(() => {
-                btn.innerText = originalText;
-                btn.disabled = false;
-            }, 1000);
-        }
-
-        function borrarHistorial() {
-            logs = [];
-            localStorage.removeItem("hist_v2");
-            renderizarLogs();
+            client.send(m);
         }
     </script>
 </body>
