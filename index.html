@@ -3,26 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistema de Seguridad Pro</title>
+    <title>Seguridad con Historial</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
     <style>
-        :root { --bg: #0f172a; --card: #1e293b; --accent: #3b82f6; }
-        body { background: var(--bg); color: white; font-family: 'Segoe UI', sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
-        .card { background: var(--card); padding: 30px; border-radius: 20px; width: 340px; text-align: center; border: 1px solid #334155; box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
+        :root { --bg: #0f172a; --card: #1e293b; }
+        body { background: var(--bg); color: white; font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; padding: 20px; margin: 0; }
+        .card { background: var(--card); padding: 25px; border-radius: 20px; width: 350px; text-align: center; border: 1px solid #334155; box-shadow: 0 10px 30px rgba(0,0,0,0.5); margin-bottom: 20px; }
         
-        /* Estilos de Estado */
-        #state-txt { padding: 12px; border-radius: 10px; font-weight: bold; margin-bottom: 20px; text-transform: uppercase; transition: 0.3s; border: 1px solid rgba(255,255,255,0.1); }
-        .st-conectando { background: #64748b; color: white; }
-        .st-apagado { background: #1e293b; color: #94a3b8; border-color: #334155; }
-        .st-armado { background: #064e3b; color: #10b981; border-color: #10b981; }
-        .st-alarma { background: #7f1d1d; color: #ef4444; border-color: #ef4444; animation: blink 1s infinite; }
-        
+        #state-txt { padding: 12px; border-radius: 10px; font-weight: bold; margin-bottom: 15px; border: 1px solid rgba(255,255,255,0.1); }
+        .st-conectando { background: #64748b; } .st-apagado { background: #1e293b; }
+        .st-armado { background: #064e3b; color: #10b981; } .st-alarma { background: #7f1d1d; animation: blink 1s infinite; }
         @keyframes blink { 50% { opacity: 0.6; } }
-        
-        #dist { font-size: 5rem; font-weight: bold; color: #f8fafc; margin: 5px 0; }
-        .btn { width: 100%; padding: 15px; border: none; border-radius: 12px; font-weight: bold; cursor: pointer; margin: 8px 0; color: white; transition: 0.2s; }
+
+        #dist { font-size: 4rem; font-weight: bold; }
+        .btn { width: 100%; padding: 12px; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; margin: 5px 0; color: white; transition: 0.2s; }
         .btn-arm { background: #10b981; } .btn-panic { background: #f59e0b; } .btn-off { background: #ef4444; }
-        .btn:active { transform: scale(0.96); }
+        
+        /* Estilos Historial */
+        .history-card { background: #1e293b; width: 350px; border-radius: 20px; padding: 20px; border: 1px solid #334155; }
+        .history-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #334155; padding-bottom: 10px; }
+        .log-item { font-size: 0.75rem; padding: 8px; border-bottom: 1px solid #2d3748; display: flex; flex-direction: column; }
+        .log-meta { color: #94a3b8; font-size: 0.65rem; margin-bottom: 2px; }
+        .log-user { color: #3b82f6; font-weight: bold; }
+        .btn-clear { background: none; border: 1px solid #ef4444; color: #ef4444; padding: 4px 8px; border-radius: 5px; cursor: pointer; font-size: 0.7rem; }
         .hidden { display: none !important; }
     </style>
 </head>
@@ -30,35 +33,75 @@
 
     <div id="login" class="card">
         <h2>🔒 PANEL ACCESO</h2>
-        <input type="text" id="u" placeholder="Usuario HiveMQ" style="width:100%; padding:12px; margin:10px 0; border-radius:8px; background:#0f172a; color:white; border:1px solid #334155;">
-        <input type="password" id="p" placeholder="Contraseña" style="width:100%; padding:12px; margin:10px 0; border-radius:8px; background:#0f172a; color:white; border:1px solid #334155;">
-        <button class="btn btn-arm" onclick="conectar()">CONECTAR SISTEMA</button>
+        <input type="text" id="u" placeholder="Usuario HiveMQ" style="width:90%; padding:10px; margin:10px 0; border-radius:8px; background:#0f172a; color:white; border:1px solid #334155;">
+        <input type="password" id="p" placeholder="Contraseña" style="width:90%; padding:10px; margin:10px 0; border-radius:8px; background:#0f172a; color:white; border:1px solid #334155;">
+        <button class="btn btn-arm" onclick="conectar()">INGRESAR</button>
     </div>
 
-    <div id="panel" class="card hidden">
-        <div id="state-txt" class="st-conectando">CONECTANDO...</div>
-        
-        <div id="dist">--</div>
-        <div style="color:#64748b; font-size:0.8rem; margin-bottom:20px;">SENSOR VL53L0X (mm)</div>
-        
-        <button class="btn btn-arm" onclick="enviar('ARMAR')">🛡️ ARMAR SISTEMA</button>
-        <button class="btn btn-panic" onclick="enviar('ACTIVAR')">🚨 PÁNICO MANUAL</button>
-        <button class="btn btn-off" onclick="enviar('APAGAR')">✖️ APAGAR / RESET</button>
+    <div id="panel" class="hidden">
+        <div class="card">
+            <div id="state-txt" class="st-conectando">CONECTANDO...</div>
+            <div id="dist">--</div>
+            <div style="color:#64748b; font-size:0.7rem; margin-bottom:15px;">MILÍMETROS</div>
+            <button class="btn btn-arm" onclick="enviar('ARMAR')">🛡️ ARMAR</button>
+            <button class="btn btn-panic" onclick="enviar('ACTIVAR')">🚨 PÁNICO</button>
+            <button class="btn btn-off" onclick="enviar('APAGAR')">✖️ APAGAR</button>
+        </div>
+
+        <div class="history-card">
+            <div class="history-header">
+                <span style="font-weight:bold; font-size:0.9rem;">🕒 HISTORIAL (Últimos 10)</span>
+                <button class="btn-clear" onclick="borrarHistorial()">Borrar</button>
+            </div>
+            <div id="log-container"></div>
+        </div>
     </div>
 
     <script>
         let client;
         let user;
+        let historial = JSON.parse(localStorage.getItem('seguridad_logs')) || [];
 
-        function actualizarUIEstado(estado) {
-            const el = document.getElementById('state-txt');
-            el.innerText = estado;
-            // Limpiar clases
-            el.className = "";
-            if(estado === "CONECTANDO") el.classList.add('st-conectando');
-            else if(estado === "APAGADO") el.classList.add('st-apagado');
-            else if(estado === "ARMADO") el.classList.add('st-armado');
-            else if(estado === "ALARMA") el.classList.add('st-alarma');
+        function renderHistorial() {
+            const container = document.getElementById('log-container');
+            container.innerHTML = "";
+            historial.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'log-item';
+                div.innerHTML = `
+                    <div class="log-meta">${item.fecha} | ${item.hora}</div>
+                    <div><span class="log-user">${item.usuario}</span>: ${item.accion}</div>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function agregarAlHistorial(rawMsg) {
+            const parts = rawMsg.split(':');
+            const usuario = parts[0] || "SISTEMA";
+            const accion = parts[1] || "Evento desconocido";
+            const ahora = new Date();
+            
+            const nuevoLog = {
+                fecha: ahora.toLocaleDateString(),
+                hora: ahora.toLocaleTimeString(),
+                usuario: usuario.toUpperCase(),
+                accion: accion
+            };
+
+            historial.unshift(nuevoLog); // Agregar al inicio
+            if(historial.length > 10) historial.pop(); // Mantener solo 10
+            
+            localStorage.setItem('seguridad_logs', JSON.stringify(historial));
+            renderHistorial();
+        }
+
+        function borrarHistorial() {
+            if(confirm("¿Borrar todos los registros?")) {
+                historial = [];
+                localStorage.removeItem('seguridad_logs');
+                renderHistorial();
+            }
         }
 
         function conectar() {
@@ -68,7 +111,14 @@
 
             client.onMessageArrived = (m) => {
                 if(m.destinationName == "esp32/distancia") document.getElementById('dist').innerText = m.payloadString;
-                if(m.destinationName == "esp32/estado") actualizarUIEstado(m.payloadString);
+                if(m.destinationName == "esp32/estado") {
+                    const el = document.getElementById('state-txt');
+                    el.innerText = m.payloadString;
+                    el.className = "st-" + m.payloadString.toLowerCase();
+                }
+                if(m.destinationName == "esp32/log") {
+                    agregarAlHistorial(m.payloadString);
+                }
             };
 
             client.connect({
@@ -76,12 +126,12 @@
                 onSuccess: () => {
                     document.getElementById('login').classList.add('hidden');
                     document.getElementById('panel').classList.remove('hidden');
-                    // Al conectar con éxito, mostramos conectando hasta recibir el primer estado real del ESP32
-                    actualizarUIEstado("CONECTANDO"); 
+                    renderHistorial(); // Mostrar lo guardado
                     client.subscribe("esp32/distancia");
                     client.subscribe("esp32/estado");
+                    client.subscribe("esp32/log");
                 },
-                onFailure: () => alert("Error de conexión")
+                onFailure: () => alert("Error de acceso")
             });
         }
 
