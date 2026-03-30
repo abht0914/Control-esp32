@@ -2,37 +2,56 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Panel de Seguridad Rápido</title>
+    <title>Panel de Control Profesional</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
     <style>
-        body { background: #0f172a; color: white; font-family: sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
-        .card { background: #1e293b; padding: 30px; border-radius: 15px; border: 1px solid #334155; text-align: center; width: 380px; }
-        #dist { font-size: 4rem; color: #10b981; font-weight: bold; margin: 10px 0; transition: all 0.2s; }
-        .btn { width: 100%; padding: 15px; cursor: pointer; border-radius: 10px; border: none; font-weight: bold; margin: 10px 0; }
+        body { background: #0f172a; color: white; font-family: 'Segoe UI', sans-serif; display: flex; justify-content: center; padding: 20px; }
+        .card { background: #1e293b; padding: 20px; border-radius: 12px; border: 1px solid #334155; text-align: center; width: 450px; }
+        #dist { font-size: 3.5rem; color: #10b981; font-weight: bold; margin: 15px 0; }
+        .btn { width: 100%; padding: 12px; cursor: pointer; border-radius: 8px; border: none; font-weight: bold; margin: 5px 0; color: white; }
         .hidden { display: none; }
+        table { width: 100%; font-size: 0.75rem; border-collapse: collapse; margin-top: 15px; }
+        th { border-bottom: 1px solid #475569; color: #94a3b8; padding: 8px; }
+        td { padding: 8px; border-bottom: 1px solid #1e293b; text-align: center; }
+        tr:first-child td { color: #10b981; font-weight: bold; }
     </style>
 </head>
 <body>
+
     <div id="login-box" class="card">
-        <h2>🔐 Acceso</h2>
-        <input type="text" id="u" placeholder="Usuario" style="width:80%; padding:10px; margin:5px;">
-        <input type="password" id="p" placeholder="Password" style="width:80%; padding:10px; margin:5px;">
-        <button class="btn" style="background:#10b981; color:white;" onclick="login()">ENTRAR</button>
+        <h2>🔐 Seguridad</h2>
+        <input type="text" id="u" placeholder="Usuario" style="width:80%; padding:10px; margin-bottom:10px;">
+        <input type="password" id="p" placeholder="Password" style="width:80%; padding:10px;">
+        <button class="btn" style="background:#10b981; margin-top:15px;" onclick="login()">ENTRAR</button>
     </div>
 
-    <div id="main-panel" class="card hidden">
-        <h3 id="user-tag">OPERADOR</h3>
-        <div id="stat" style="color:#f59e0b">CONECTANDO...</div>
-        <div id="dist">0 mm</div>
-        <button class="btn" style="background:#10b981; color:white;" onclick="enviar('ARMAR')">🛡️ ARMAR</button>
-        <button class="btn" style="background:#f59e0b; color:white;" onclick="enviar('ACTIVAR')">🚨 PÁNICO</button>
-        <button class="btn" style="background:#ef4444; color:white;" onclick="enviar('APAGAR')">✖️ RESET</button>
-        <ul id="logList" style="text-align:left; font-size:0.7rem; max-height:100px; overflow-y:auto;"></ul>
+    <div id="main-panel" class="hidden">
+        <div class="card">
+            <h3 id="user-tag" style="margin:0; color:#94a3b8; font-size: 0.9rem;">---</h3>
+            <div id="stat" style="color:#f59e0b; margin: 10px 0;">SINCRONIZANDO...</div>
+            <div id="dist">0 mm</div>
+            <button class="btn" style="background:#10b981;" onclick="enviar('ARMAR')">🛡️ ARMAR</button>
+            <button class="btn" style="background:#f59e0b;" onclick="enviar('ACTIVAR')">🚨 PÁNICO</button>
+            <button class="btn" style="background:#ef4444;" onclick="enviar('APAGAR')">✖️ RESET</button>
+            
+            <h4 style="margin: 20px 0 10px 0; color:#94a3b8;">Últimos 10 Eventos</h4>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Fecha/Hora</th>
+                        <th>Usuario</th>
+                        <th>Acción</th>
+                    </tr>
+                </thead>
+                <tbody id="logBody"></tbody>
+            </table>
+        </div>
     </div>
 
     <script>
         let mqtt; let user;
         const host = "7340fcf31a5f4b45984049723fa706e8.s1.eu.hivemq.cloud";
+        let logs = [];
 
         function login() {
             user = document.getElementById("u").value;
@@ -42,10 +61,17 @@
             mqtt.onMessageArrived = (m) => {
                 if(m.destinationName == "esp32/distancia") document.getElementById("dist").innerText = m.payloadString + " mm";
                 if(m.destinationName == "esp32/estado") document.getElementById("stat").innerText = m.payloadString;
+                
                 if(m.destinationName == "esp32/log") {
-                    let li = document.createElement("li");
-                    li.innerText = `[${new Date().toLocaleTimeString()}] ${m.payloadString}`;
-                    document.getElementById("logList").prepend(li);
+                    const data = m.payloadString.split("|"); // Separamos Usuario y Acción
+                    const now = new Date();
+                    const fechaHora = now.toLocaleDateString() + " " + now.toLocaleTimeString();
+                    
+                    const nuevoEvento = { fh: fechaHora, u: data[0], a: data[1] };
+                    logs.unshift(nuevoEvento);
+                    if(logs.length > 10) logs.pop();
+                    
+                    actualizarTabla();
                 }
             };
 
@@ -59,6 +85,17 @@
                     mqtt.subscribe("esp32/estado");
                 }
             });
+        }
+
+        function actualizarTabla() {
+            const body = document.getElementById("logBody");
+            body.innerHTML = logs.map(l => `
+                <tr>
+                    <td>${l.fh}</td>
+                    <td>${l.u}</td>
+                    <td>${l.a}</td>
+                </tr>
+            `).join("");
         }
 
         function enviar(acc) {
