@@ -1,161 +1,74 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <title>Panel de Control de Seguridad</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
-    <style>
-        body { background: #0f172a; color: white; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
-        .hidden { display: none !important; }
-        
-        /* Caja de Login */
-        #login-box { background: #1e293b; padding: 30px; border-radius: 15px; text-align: center; width: 320px; border: 1px solid #334155; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
-        
-        /* Panel Principal */
-        #main-panel { width: 95%; max-width: 500px; display: flex; flex-direction: column; gap: 15px; }
-        .card { background: #1e293b; padding: 25px; border-radius: 15px; border: 1px solid #334155; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
-        
-        /* Inputs y Botones */
-        input { width: 90%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: white; }
-        .btn { width: 100%; padding: 15px; cursor: pointer; border-radius: 10px; border: none; font-weight: bold; margin: 8px 0; font-size: 1rem; transition: transform 0.1s, background 0.2s; }
-        .btn:active { transform: scale(0.97); }
-        
-        .btn-arm { background: #10b981; color: white; } /* Verde */
-        .btn-act { background: #f59e0b; color: white; } /* Naranja */
-        .btn-off { background: #ef4444; color: white; } /* Rojo */
-        
-        /* Indicadores */
-        #dist { font-size: 3.5rem; color: #10b981; font-weight: bold; margin: 15px 0; }
-        #stat { font-size: 1.2rem; font-weight: bold; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px; }
-        
-        /* Historial */
-        h4 { margin: 0 0 15px 0; color: #94a3b8; border-bottom: 1px solid #334155; padding-bottom: 10px; }
-        ul { list-style: none; padding: 10px; background: #0f172a; border-radius: 10px; text-align: left; max-height: 200px; overflow-y: auto; border: 1px solid #1e293b; }
-        li { font-size: 0.85rem; padding: 10px; border-bottom: 1px solid #1e293b; color: #cbd5e1; line-height: 1.4; }
-        li:first-child { color: #10b981; font-weight: bold; border-left: 4px solid #10b981; padding-left: 10px; }
-        
-        .clear-btn { background: none; border: none; color: #64748b; cursor: pointer; font-size: 0.75rem; margin-top: 10px; text-decoration: underline; }
-    </style>
-</head>
-<body>
+<script>
+    let mqtt;
+    let user;
+    const host = "7340fcf31a5f4b45984049723fa706e8.s1.eu.hivemq.cloud";
+    let logs = JSON.parse(localStorage.getItem("historial_seguridad")) || [];
 
-    <div id="login-box">
-        <h2 style="margin-top:0;">🔐 Acceso Seguro</h2>
-        <input type="text" id="u" placeholder="Usuario HiveMQ">
-        <input type="password" id="p" placeholder="Contraseña">
-        <button class="btn btn-arm" onclick="login()">INGRESAR AL PANEL</button>
-        <p id="err" style="color: #ef4444; font-size: 0.85rem; margin-top: 10px;"></p>
-    </div>
+    function renderizarLogs() {
+        const listaUI = document.getElementById("logList");
+        listaUI.innerHTML = logs.length > 0 
+            ? logs.map(l => `<li>${l}</li>`).join("") 
+            : "<li>No hay registros recientes</li>";
+    }
 
-    <div id="main-panel" class="hidden">
-        <div class="card">
-            <h3 id="user-tag" style="margin:0; color:#94a3b8; font-size: 0.9rem;">Operador: ---</h3>
-            <div id="stat" style="color: #f59e0b; margin-top: 10px;">Sincronizando estado...</div>
-            <div id="dist">0 mm</div>
-            
-            <button class="btn btn-arm" onclick="enviar('ARMAR')">🛡️ ARMAR VIGILANCIA</button>
-            <button class="btn btn-act" onclick="enviar('ACTIVAR')">🚨 ACTIVAR ALARMA</button>
-            <button class="btn btn-off" onclick="enviar('APAGAR')">✖️ DESACTIVAR / RESET</button>
-        </div>
+    function login() {
+        user = document.getElementById("u").value.trim();
+        let pass = document.getElementById("p").value.trim();
+        if(!user || !pass) return;
 
-        <div class="card">
-            <h4>Historial de Actividad</h4>
-            <ul id="logList"><li>Esperando datos...</li></ul>
-            <button class="clear-btn" onclick="borrarHistorial()">Limpiar historial local</button>
-        </div>
-    </div>
-
-    <script>
-        let mqtt;
-        let user;
-        const host = "7340fcf31a5f4b45984049723fa706e8.s1.eu.hivemq.cloud";
+        const clientId = "web_" + Math.random().toString(16).substr(2, 4);
+        mqtt = new Paho.MQTT.Client(host, 8884, clientId);
         
-        // Cargar historial persistente del navegador
-        let logs = JSON.parse(localStorage.getItem("historial_seguridad")) || [];
-
-        function renderizarLogs() {
-            const listaUI = document.getElementById("logList");
-            if (logs.length > 0) {
-                listaUI.innerHTML = logs.map(l => `<li>${l}</li>`).join("");
-            } else {
-                listaUI.innerHTML = "<li>No hay registros recientes</li>";
+        mqtt.onMessageArrived = (m) => {
+            if(m.destinationName == "esp32/distancia") {
+                document.getElementById("dist").innerText = m.payloadString + " mm";
             }
-        }
-
-        function login() {
-            user = document.getElementById("u").value.trim();
-            let pass = document.getElementById("p").value.trim();
-            if(!user || !pass) return;
-
-            // Identificador único para evitar conflictos entre múltiples pestañas
-            const clientId = "web_client_" + Math.random().toString(16).substr(2, 5);
-            mqtt = new Paho.MQTT.Client(host, 8884, clientId);
-            
-            mqtt.onMessageArrived = (m) => {
-                // 1. Actualizar Distancia
-                if(m.destinationName == "esp32/distancia") {
-                    document.getElementById("dist").innerText = m.payloadString + " mm";
-                }
+            if(m.destinationName == "esp32/estado") {
+                document.getElementById("stat").innerText = m.payloadString;
+            }
+            if(m.destinationName == "esp32/log") {
+                const timestamp = new Date().toLocaleTimeString();
+                const nuevoLog = `[${timestamp}] ${m.payloadString}`;
                 
-                // 2. Actualizar Estado General
-                if(m.destinationName == "esp32/estado") {
-                    document.getElementById("stat").innerText = m.payloadString;
-                }
-
-                // 3. Manejar Historial de Logs (Quién hizo qué)
-                if(m.destinationName == "esp32/log") {
-                    const mensajeRecibido = m.payloadString; // Formato esperado "Nombre: Accion"
-                    const timestamp = new Date().toLocaleTimeString();
-                    const nuevoLog = `[${timestamp}] ${mensajeRecibido}`;
-
-                    // Evitar duplicar el mismo mensaje si el servidor MQTT envía el mensaje retenido al conectar
-                    if (logs.length === 0 || logs[0].indexOf(mensajeRecibido) === -1) {
-                        logs.unshift(nuevoLog);
-                        if(logs.length > 10) logs.pop(); // Mantener solo los últimos 10
-                        
-                        localStorage.setItem("historial_seguridad", JSON.stringify(logs));
-                        renderizarLogs();
-                    }
-                }
-            };
-
-            mqtt.connect({
-                useSSL: true, 
-                userName: user, 
-                password: pass,
-                onSuccess: () => {
-                    document.getElementById("login-box").classList.add("hidden");
-                    document.getElementById("main-panel").classList.remove("hidden");
-                    document.getElementById("user-tag").innerText = "OPERADOR: " + user.toUpperCase();
+                // Evitar duplicados por mensajes retenidos
+                if (logs.length === 0 || logs[0].split('] ')[1] !== m.payloadString) {
+                    logs.unshift(nuevoLog);
+                    if(logs.length > 10) logs.pop();
+                    localStorage.setItem("historial_seguridad", JSON.stringify(logs));
                     renderizarLogs();
-                    
-                    mqtt.subscribe("esp32/distancia");
-                    mqtt.subscribe("esp32/log");
-                    mqtt.subscribe("esp32/estado");
-                },
-                onFailure: (e) => { 
-                    console.log(e);
-                    document.getElementById("err").innerText = "❌ Credenciales o conexión fallida"; 
                 }
-            });
-        }
-
-        function enviar(acc) {
-            if(!mqtt || !mqtt.isConnected()) return;
-            // El formato enviado es "Usuario:COMANDO"
-            // El ESP32 debe procesar esto y devolver la confirmación por "esp32/log"
-            let m = new Paho.MQTT.Message(user + ":" + acc);
-            m.destinationName = "esp32/comando";
-            mqtt.send(m);
-        }
-
-        function borrarHistorial() {
-            if(confirm("¿Seguro que quieres limpiar los registros de este dispositivo?")) {
-                logs = [];
-                localStorage.removeItem("historial_seguridad");
-                renderizarLogs();
             }
+        };
+
+        mqtt.connect({
+            useSSL: true, userName: user, password: pass,
+            onSuccess: () => {
+                document.getElementById("login-box").classList.add("hidden");
+                document.getElementById("main-panel").classList.remove("hidden");
+                document.getElementById("user-tag").innerText = "OPERADOR ACTUAL: " + user.toUpperCase();
+                mqtt.subscribe("esp32/distancia");
+                mqtt.subscribe("esp32/log");
+                mqtt.subscribe("esp32/estado");
+                renderizarLogs();
+            },
+            onFailure: () => { document.getElementById("err").innerText = "❌ Credenciales incorrectas"; }
+        });
+    }
+
+    function enviar(acc) {
+        if(!mqtt || !mqtt.isConnected()) return;
+        // IMPORTANTE: Se envía "Usuario:Acción"
+        let payload = user + ":" + acc; 
+        let m = new Paho.MQTT.Message(payload);
+        m.destinationName = "esp32/comando";
+        mqtt.send(m);
+    }
+
+    function borrarHistorial() {
+        if(confirm("¿Borrar historial?")) {
+            logs = [];
+            localStorage.removeItem("historial_seguridad");
+            renderizarLogs();
         }
-    </script>
-</body>
-</html>
+    }
+</script>
