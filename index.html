@@ -10,25 +10,27 @@
         body { background: var(--bg); color: white; font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; padding: 20px; margin: 0; }
         .card { background: var(--card); padding: 25px; border-radius: 20px; width: 350px; text-align: center; border: 1px solid #334155; box-shadow: 0 10px 30px rgba(0,0,0,0.5); margin-bottom: 20px; }
         
-        #state-txt { padding: 12px; border-radius: 10px; font-weight: bold; margin-bottom: 15px; border: 1px solid rgba(255,255,255,0.1); text-transform: uppercase; }
+        #state-txt { padding: 12px; border-radius: 10px; font-weight: bold; margin-bottom: 15px; border: 1px solid rgba(255,255,255,0.1); text-transform: uppercase; transition: 0.3s; }
+        
+        /* Clases de estado dinámicas */
         .st-conectando { background: #64748b; } 
-        .st-desarmado { background: #1e293b; color: #94a3b8; }
-        .st-armado { background: #064e3b; color: #10b981; } 
-        .st-alarma { background: #7f1d1d; color: #f87171; animation: blink 1s infinite; }
+        .st-disponible, .st-off { background: #1e293b; color: #94a3b8; }
+        .st-armado, .st-vigilando { background: #064e3b; color: #10b981; border: 1px solid #10b981; } 
+        .st-alarma, .st-alerta { background: #7f1d1d; color: #f87171; animation: blink 1s infinite; border: 1px solid #f87171; }
         
         @keyframes blink { 50% { opacity: 0.5; } }
 
-        #dist { font-size: 4rem; font-weight: bold; line-height: 1; }
-        .btn { width: 100%; padding: 12px; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; margin: 5px 0; color: white; transition: 0.2s; font-size: 0.9rem; }
+        #dist { font-size: 4rem; font-weight: bold; line-height: 1; color: var(--accent); }
+        .btn { width: 100%; padding: 14px; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; margin: 8px 0; color: white; transition: 0.2s; font-size: 0.95rem; text-transform: uppercase; }
         .btn-arm { background: #10b981; } 
         .btn-panic { background: #f59e0b; } 
         .btn-off { background: #ef4444; }
         .btn-reset { background: #fca311; color: #0f172a; margin-top: 15px; border: 2px solid #b45309; }
-        .btn:active { transform: scale(0.98); }
+        .btn:active { transform: scale(0.95); }
         
         /* Historial */
-        .history-card { background: #1e293b; width: 350px; border-radius: 20px; padding: 20px; border: 1px solid #334155; }
-        .history-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #334155; padding-bottom: 10px; }
+        .history-card { background: #1e293b; width: 350px; border-radius: 20px; padding: 20px; border: 1px solid #334155; max-height: 300px; overflow-y: auto; }
+        .history-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #334155; padding-bottom: 10px; position: sticky; top: 0; background: #1e293b; }
         .log-item { font-size: 0.75rem; padding: 8px; border-bottom: 1px solid #2d3748; display: flex; flex-direction: column; }
         .log-meta { color: #94a3b8; font-size: 0.65rem; margin-bottom: 2px; }
         .log-user { color: var(--accent); font-weight: bold; }
@@ -90,11 +92,20 @@
         }
 
         function agregarAlHistorial(rawMsg) {
-            const parts = rawMsg.split(':');
-            const usuario = parts[0] || "SISTEMA";
-            const accion = parts[1] || "Evento";
+            let usuario = "SISTEMA";
+            let accion = rawMsg;
+
+            if (rawMsg.includes("->")) {
+                const parts = rawMsg.split("->");
+                usuario = parts[0].trim();
+                accion = parts[1].trim();
+            } else if (rawMsg.includes(":")) {
+                const parts = rawMsg.split(":");
+                usuario = parts[0].trim();
+                accion = parts[1].trim();
+            }
+
             const ahora = new Date();
-            
             const nuevoLog = {
                 fecha: ahora.toLocaleDateString(),
                 hora: ahora.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}),
@@ -103,7 +114,7 @@
             };
 
             historial.unshift(nuevoLog);
-            if(historial.length > 10) historial.pop();
+            if(historial.length > 15) historial.pop();
             localStorage.setItem('seguridad_logs', JSON.stringify(historial));
             renderHistorial();
         }
@@ -119,8 +130,7 @@
         function conectar() {
             user = document.getElementById('u').value;
             let pass = document.getElementById('p').value;
-            // ID de cliente único para evitar desconexiones
-            const clientId = "web_client_" + Math.random().toString(16).substr(2, 6);
+            const clientId = "web_ui_" + Math.random().toString(16).substr(2, 6);
             
             client = new Paho.MQTT.Client("7340fcf31a5f4b45984049723fa706e8.s1.eu.hivemq.cloud", 8884, clientId);
 
@@ -135,13 +145,25 @@
                 if(topic == "esp32/estado") {
                     const el = document.getElementById('state-txt');
                     el.innerText = payload;
-                    // Ajustamos clase CSS (st-apagado, st-armado, st-alarma)
-                    el.className = "st-" + payload.toLowerCase();
+                    
+                    // Limpieza de caracteres especiales para la clase CSS (ej: "🚨 ALARMA" -> "alarma")
+                    let cleanClass = payload.replace(/[^\w\s]|_/g, "").trim().toLowerCase();
+                    if(cleanClass.includes("vigilando")) cleanClass = "armado";
+                    if(cleanClass.includes("alerta") || cleanClass.includes("alarma")) cleanClass = "alarma";
+                    if(cleanClass.includes("off") || cleanClass.includes("disponible")) cleanClass = "off";
+                    
+                    el.className = "st-" + cleanClass;
                 }
                 
                 if(topic == "esp32/log") {
                     agregarAlHistorial(payload);
                 }
+            };
+
+            client.onConnectionLost = (e) => {
+                document.getElementById('state-txt').innerText = "DESCONECTADO";
+                document.getElementById('state-txt').className = "st-conectando";
+                console.log("Conexión perdida: " + e.errorMessage);
             };
 
             client.connect({
@@ -158,24 +180,18 @@
                     console.log("Conectado exitosamente");
                 },
                 onFailure: (e) => {
-                    console.log(e);
-                    alert("Fallo de conexión. Revisa usuario/contraseña.");
+                    alert("Fallo de conexión: " + e.errorMessage);
                 }
             });
         }
 
         function enviar(cmd) {
-            // Enviamos el formato Usuario:Comando para que el ESP32 lo registre en el log
-            let m = new Paho.MQTT.Message(user + ":" + cmd);
+            // Enviamos el formato Usuario:Comando que el ESP32 espera procesar
+            const fullMsg = user + ":" + cmd;
+            let m = new Paho.MQTT.Message(fullMsg);
             m.destinationName = "esp32/comando";
             client.send(m);
-            
-            // Si es un comando de usuario, lo agregamos localmente al historial de inmediato
-            if(cmd !== 'REINICIAR_SENSOR') {
-                agregarAlHistorial(user + ":" + cmd);
-            } else {
-                alert("Orden de recuperación enviada al sensor.");
-            }
+            console.log("Enviado a MQTT: " + fullMsg);
         }
     </script>
 </body>
