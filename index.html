@@ -3,28 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Seguridad con Historial</title>
+    <title>Seguridad Avanzada - ESP32</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
     <style>
-        :root { --bg: #0f172a; --card: #1e293b; }
+        :root { --bg: #0f172a; --card: #1e293b; --accent: #3b82f6; }
         body { background: var(--bg); color: white; font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; padding: 20px; margin: 0; }
         .card { background: var(--card); padding: 25px; border-radius: 20px; width: 350px; text-align: center; border: 1px solid #334155; box-shadow: 0 10px 30px rgba(0,0,0,0.5); margin-bottom: 20px; }
         
-        #state-txt { padding: 12px; border-radius: 10px; font-weight: bold; margin-bottom: 15px; border: 1px solid rgba(255,255,255,0.1); }
-        .st-conectando { background: #64748b; } .st-apagado { background: #1e293b; }
-        .st-armado { background: #064e3b; color: #10b981; } .st-alarma { background: #7f1d1d; animation: blink 1s infinite; }
-        @keyframes blink { 50% { opacity: 0.6; } }
-
-        #dist { font-size: 4rem; font-weight: bold; }
-        .btn { width: 100%; padding: 12px; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; margin: 5px 0; color: white; transition: 0.2s; }
-        .btn-arm { background: #10b981; } .btn-panic { background: #f59e0b; } .btn-off { background: #ef4444; }
+        #state-txt { padding: 12px; border-radius: 10px; font-weight: bold; margin-bottom: 15px; border: 1px solid rgba(255,255,255,0.1); text-transform: uppercase; }
+        .st-conectando { background: #64748b; } 
+        .st-desarmado { background: #1e293b; color: #94a3b8; }
+        .st-armado { background: #064e3b; color: #10b981; } 
+        .st-alarma { background: #7f1d1d; color: #f87171; animation: blink 1s infinite; }
         
-        /* Estilos Historial */
+        @keyframes blink { 50% { opacity: 0.5; } }
+
+        #dist { font-size: 4rem; font-weight: bold; line-height: 1; }
+        .btn { width: 100%; padding: 12px; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; margin: 5px 0; color: white; transition: 0.2s; font-size: 0.9rem; }
+        .btn-arm { background: #10b981; } 
+        .btn-panic { background: #f59e0b; } 
+        .btn-off { background: #ef4444; }
+        .btn-reset { background: #fca311; color: #0f172a; margin-top: 15px; border: 2px solid #b45309; }
+        .btn:active { transform: scale(0.98); }
+        
+        /* Historial */
         .history-card { background: #1e293b; width: 350px; border-radius: 20px; padding: 20px; border: 1px solid #334155; }
         .history-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #334155; padding-bottom: 10px; }
         .log-item { font-size: 0.75rem; padding: 8px; border-bottom: 1px solid #2d3748; display: flex; flex-direction: column; }
         .log-meta { color: #94a3b8; font-size: 0.65rem; margin-bottom: 2px; }
-        .log-user { color: #3b82f6; font-weight: bold; }
+        .log-user { color: var(--accent); font-weight: bold; }
         .btn-clear { background: none; border: 1px solid #ef4444; color: #ef4444; padding: 4px 8px; border-radius: 5px; cursor: pointer; font-size: 0.7rem; }
         .hidden { display: none !important; }
     </style>
@@ -32,26 +39,32 @@
 <body>
 
     <div id="login" class="card">
-        <h2>🔒 PANEL ACCESO</h2>
-        <input type="text" id="u" placeholder="Usuario HiveMQ" style="width:90%; padding:10px; margin:10px 0; border-radius:8px; background:#0f172a; color:white; border:1px solid #334155;">
-        <input type="password" id="p" placeholder="Contraseña" style="width:90%; padding:10px; margin:10px 0; border-radius:8px; background:#0f172a; color:white; border:1px solid #334155;">
-        <button class="btn btn-arm" onclick="conectar()">INGRESAR</button>
+        <h2>🔒 ACCESO PANEL</h2>
+        <input type="text" id="u" placeholder="Usuario HiveMQ" value="Esp-32" style="width:90%; padding:10px; margin:10px 0; border-radius:8px; background:#0f172a; color:white; border:1px solid #334155;">
+        <input type="password" id="p" placeholder="Contraseña" value="Controltotal1" style="width:90%; padding:10px; margin:10px 0; border-radius:8px; background:#0f172a; color:white; border:1px solid #334155;">
+        <button class="btn btn-arm" onclick="conectar()">INGRESAR AL PANEL</button>
     </div>
 
     <div id="panel" class="hidden">
         <div class="card">
             <div id="state-txt" class="st-conectando">CONECTANDO...</div>
             <div id="dist">--</div>
-            <div style="color:#64748b; font-size:0.7rem; margin-bottom:15px;">MILÍMETROS</div>
-            <button class="btn btn-arm" onclick="enviar('ARMAR')">🛡️ ARMAR</button>
-            <button class="btn btn-panic" onclick="enviar('ACTIVAR')">🚨 PÁNICO</button>
-            <button class="btn btn-off" onclick="enviar('APAGAR')">✖️ APAGAR</button>
+            <div style="color:#64748b; font-size:0.7rem; margin-bottom:15px; letter-spacing: 2px;">MILÍMETROS</div>
+            
+            <button class="btn btn-arm" onclick="enviar('ARMAR')">🛡️ ARMAR SISTEMA</button>
+            <button class="btn btn-panic" onclick="enviar('ACTIVAR')">🚨 BOTÓN PÁNICO</button>
+            <button class="btn btn-off" onclick="enviar('APAGAR')">✖️ DESACTIVAR</button>
+            
+            <hr style="border: 0; border-top: 1px solid #334155; margin: 15px 0;">
+            
+            <button class="btn btn-reset" onclick="enviar('REINICIAR_SENSOR')">⚡ REINICIO MAESTRO SENSOR</button>
+            <div style="color:#fca311; font-size:0.6rem; margin-top:5px;">Usa esto si la distancia no cambia</div>
         </div>
 
         <div class="history-card">
             <div class="history-header">
-                <span style="font-weight:bold; font-size:0.9rem;">🕒 HISTORIAL (Últimos 10)</span>
-                <button class="btn-clear" onclick="borrarHistorial()">Borrar</button>
+                <span style="font-weight:bold; font-size:0.85rem;">🕒 EVENTOS RECIENTES</span>
+                <button class="btn-clear" onclick="borrarHistorial()">Limpiar</button>
             </div>
             <div id="log-container"></div>
         </div>
@@ -79,25 +92,24 @@
         function agregarAlHistorial(rawMsg) {
             const parts = rawMsg.split(':');
             const usuario = parts[0] || "SISTEMA";
-            const accion = parts[1] || "Evento desconocido";
+            const accion = parts[1] || "Evento";
             const ahora = new Date();
             
             const nuevoLog = {
                 fecha: ahora.toLocaleDateString(),
-                hora: ahora.toLocaleTimeString(),
+                hora: ahora.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'}),
                 usuario: usuario.toUpperCase(),
                 accion: accion
             };
 
-            historial.unshift(nuevoLog); // Agregar al inicio
-            if(historial.length > 10) historial.pop(); // Mantener solo 10
-            
+            historial.unshift(nuevoLog);
+            if(historial.length > 10) historial.pop();
             localStorage.setItem('seguridad_logs', JSON.stringify(historial));
             renderHistorial();
         }
 
         function borrarHistorial() {
-            if(confirm("¿Borrar todos los registros?")) {
+            if(confirm("¿Borrar historial?")) {
                 historial = [];
                 localStorage.removeItem('seguridad_logs');
                 renderHistorial();
@@ -107,38 +119,63 @@
         function conectar() {
             user = document.getElementById('u').value;
             let pass = document.getElementById('p').value;
-            client = new Paho.MQTT.Client("7340fcf31a5f4b45984049723fa706e8.s1.eu.hivemq.cloud", 8884, "web_" + Math.random().toString(16).substr(2,4));
+            // ID de cliente único para evitar desconexiones
+            const clientId = "web_client_" + Math.random().toString(16).substr(2, 6);
+            
+            client = new Paho.MQTT.Client("7340fcf31a5f4b45984049723fa706e8.s1.eu.hivemq.cloud", 8884, clientId);
 
             client.onMessageArrived = (m) => {
-                if(m.destinationName == "esp32/distancia") document.getElementById('dist').innerText = m.payloadString;
-                if(m.destinationName == "esp32/estado") {
-                    const el = document.getElementById('state-txt');
-                    el.innerText = m.payloadString;
-                    el.className = "st-" + m.payloadString.toLowerCase();
+                const topic = m.destinationName;
+                const payload = m.payloadString;
+
+                if(topic == "esp32/distancia") {
+                    document.getElementById('dist').innerText = payload;
                 }
-                if(m.destinationName == "esp32/log") {
-                    agregarAlHistorial(m.payloadString);
+                
+                if(topic == "esp32/estado") {
+                    const el = document.getElementById('state-txt');
+                    el.innerText = payload;
+                    // Ajustamos clase CSS (st-apagado, st-armado, st-alarma)
+                    el.className = "st-" + payload.toLowerCase();
+                }
+                
+                if(topic == "esp32/log") {
+                    agregarAlHistorial(payload);
                 }
             };
 
             client.connect({
-                useSSL: true, userName: user, password: pass,
+                useSSL: true, 
+                userName: user, 
+                password: pass,
                 onSuccess: () => {
                     document.getElementById('login').classList.add('hidden');
                     document.getElementById('panel').classList.remove('hidden');
-                    renderHistorial(); // Mostrar lo guardado
+                    renderHistorial();
                     client.subscribe("esp32/distancia");
                     client.subscribe("esp32/estado");
                     client.subscribe("esp32/log");
+                    console.log("Conectado exitosamente");
                 },
-                onFailure: () => alert("Error de acceso")
+                onFailure: (e) => {
+                    console.log(e);
+                    alert("Fallo de conexión. Revisa usuario/contraseña.");
+                }
             });
         }
 
         function enviar(cmd) {
+            // Enviamos el formato Usuario:Comando para que el ESP32 lo registre en el log
             let m = new Paho.MQTT.Message(user + ":" + cmd);
             m.destinationName = "esp32/comando";
             client.send(m);
+            
+            // Si es un comando de usuario, lo agregamos localmente al historial de inmediato
+            if(cmd !== 'REINICIAR_SENSOR') {
+                agregarAlHistorial(user + ":" + cmd);
+            } else {
+                alert("Orden de recuperación enviada al sensor.");
+            }
         }
     </script>
 </body>
