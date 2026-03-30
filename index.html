@@ -1,74 +1,95 @@
-<script>
-    let mqtt;
-    let user;
-    const host = "7340fcf31a5f4b45984049723fa706e8.s1.eu.hivemq.cloud";
-    let logs = JSON.parse(localStorage.getItem("historial_seguridad")) || [];
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Panel de Seguridad IoT</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
+    <style>
+        body { background: #0f172a; color: white; font-family: sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+        .hidden { display: none !important; }
+        #login-box, .card { background: #1e293b; padding: 25px; border-radius: 15px; border: 1px solid #334155; text-align: center; width: 350px; }
+        input { width: 90%; padding: 10px; margin: 10px 0; border-radius: 5px; border: 1px solid #334155; background: #0f172a; color: white; }
+        .btn { width: 100%; padding: 12px; cursor: pointer; border-radius: 8px; border: none; font-weight: bold; margin: 5px 0; }
+        .btn-arm { background: #10b981; color: white; }
+        .btn-act { background: #f59e0b; color: white; }
+        .btn-off { background: #ef4444; color: white; }
+        #dist { font-size: 3rem; color: #10b981; font-weight: bold; margin: 10px 0; }
+        ul { list-style: none; padding: 0; text-align: left; max-height: 150px; overflow-y: auto; font-size: 0.8rem; }
+        li { padding: 5px; border-bottom: 1px solid #334155; color: #cbd5e1; }
+    </style>
+</head>
+<body>
 
-    function renderizarLogs() {
-        const listaUI = document.getElementById("logList");
-        listaUI.innerHTML = logs.length > 0 
-            ? logs.map(l => `<li>${l}</li>`).join("") 
-            : "<li>No hay registros recientes</li>";
-    }
+    <div id="login-box">
+        <h2>🔐 Acceso</h2>
+        <input type="text" id="u" placeholder="Usuario HiveMQ">
+        <input type="password" id="p" placeholder="Contraseña">
+        <button class="btn btn-arm" onclick="login()">INGRESAR</button>
+        <p id="err" style="color: #ef4444;"></p>
+    </div>
 
-    function login() {
-        user = document.getElementById("u").value.trim();
-        let pass = document.getElementById("p").value.trim();
-        if(!user || !pass) return;
+    <div id="main-panel" class="hidden" style="width: 400px; display: flex; flex-direction: column; gap: 15px;">
+        <div class="card" style="width: auto;">
+            <h3 id="user-tag">Operador: ---</h3>
+            <div id="stat" style="color: #f59e0b;">Sincronizando...</div>
+            <div id="dist">0 mm</div>
+            <button class="btn btn-arm" onclick="enviar('ARMAR')">🛡️ ARMAR</button>
+            <button class="btn btn-act" onclick="enviar('ACTIVAR')">🚨 PÁNICO</button>
+            <button class="btn btn-off" onclick="enviar('APAGAR')">✖️ RESET</button>
+        </div>
 
-        const clientId = "web_" + Math.random().toString(16).substr(2, 4);
-        mqtt = new Paho.MQTT.Client(host, 8884, clientId);
-        
-        mqtt.onMessageArrived = (m) => {
-            if(m.destinationName == "esp32/distancia") {
-                document.getElementById("dist").innerText = m.payloadString + " mm";
-            }
-            if(m.destinationName == "esp32/estado") {
-                document.getElementById("stat").innerText = m.payloadString;
-            }
-            if(m.destinationName == "esp32/log") {
-                const timestamp = new Date().toLocaleTimeString();
-                const nuevoLog = `[${timestamp}] ${m.payloadString}`;
-                
-                // Evitar duplicados por mensajes retenidos
-                if (logs.length === 0 || logs[0].split('] ')[1] !== m.payloadString) {
-                    logs.unshift(nuevoLog);
+        <div class="card" style="width: auto;">
+            <h4>Historial de Eventos</h4>
+            <ul id="logList"></ul>
+        </div>
+    </div>
+
+    <script>
+        let mqtt; let user;
+        const host = "7340fcf31a5f4b45984049723fa706e8.s1.eu.hivemq.cloud";
+        let logs = JSON.parse(localStorage.getItem("historial_seguridad")) || [];
+
+        function renderizarLogs() {
+            document.getElementById("logList").innerHTML = logs.map(l => `<li>${l}</li>`).join("");
+        }
+
+        function login() {
+            user = document.getElementById("u").value;
+            let pass = document.getElementById("p").value;
+            mqtt = new Paho.MQTT.Client(host, 8884, "web_" + Math.random().toString(16).substr(2, 4));
+            
+            mqtt.onMessageArrived = (m) => {
+                if(m.destinationName == "esp32/distancia") document.getElementById("dist").innerText = m.payloadString + " mm";
+                if(m.destinationName == "esp32/estado") document.getElementById("stat").innerText = m.payloadString;
+                if(m.destinationName == "esp32/log") {
+                    const entry = `[${new Date().toLocaleTimeString()}] ${m.payloadString}`;
+                    logs.unshift(entry);
                     if(logs.length > 10) logs.pop();
                     localStorage.setItem("historial_seguridad", JSON.stringify(logs));
                     renderizarLogs();
                 }
-            }
-        };
+            };
 
-        mqtt.connect({
-            useSSL: true, userName: user, password: pass,
-            onSuccess: () => {
-                document.getElementById("login-box").classList.add("hidden");
-                document.getElementById("main-panel").classList.remove("hidden");
-                document.getElementById("user-tag").innerText = "OPERADOR ACTUAL: " + user.toUpperCase();
-                mqtt.subscribe("esp32/distancia");
-                mqtt.subscribe("esp32/log");
-                mqtt.subscribe("esp32/estado");
-                renderizarLogs();
-            },
-            onFailure: () => { document.getElementById("err").innerText = "❌ Credenciales incorrectas"; }
-        });
-    }
-
-    function enviar(acc) {
-        if(!mqtt || !mqtt.isConnected()) return;
-        // IMPORTANTE: Se envía "Usuario:Acción"
-        let payload = user + ":" + acc; 
-        let m = new Paho.MQTT.Message(payload);
-        m.destinationName = "esp32/comando";
-        mqtt.send(m);
-    }
-
-    function borrarHistorial() {
-        if(confirm("¿Borrar historial?")) {
-            logs = [];
-            localStorage.removeItem("historial_seguridad");
-            renderizarLogs();
+            mqtt.connect({ useSSL: true, userName: user, password: pass,
+                onSuccess: () => {
+                    document.getElementById("login-box").classList.add("hidden");
+                    document.getElementById("main-panel").classList.remove("hidden");
+                    document.getElementById("user-tag").innerText = "OPERADOR: " + user.toUpperCase();
+                    mqtt.subscribe("esp32/distancia");
+                    mqtt.subscribe("esp32/log");
+                    mqtt.subscribe("esp32/estado");
+                    renderizarLogs();
+                },
+                onFailure: () => { document.getElementById("err").innerText = "❌ Error de conexión"; }
+            });
         }
-    }
-</script>
+
+        function enviar(acc) {
+            if(!mqtt.isConnected()) return;
+            let m = new Paho.MQTT.Message(user + ":" + acc);
+            m.destinationName = "esp32/comando";
+            mqtt.send(m);
+        }
+    </script>
+</body>
+</html>
