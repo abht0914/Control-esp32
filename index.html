@@ -2,58 +2,65 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Panel de Seguridad Pro</title>
+    <title>Panel de Seguridad IoT</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
     <style>
-        body { background: #0f172a; color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
-        .card { background: #1e293b; padding: 2rem; border-radius: 1rem; text-align: center; width: 320px; border: 1px solid #334155; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.3); }
-        /* Este es el ID importante */
-        #distancia-texto { font-size: 5rem; color: #10b981; font-weight: bold; margin: 10px 0; display: block; }
-        .label { color: #94a3b8; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; }
-        input { width: 90%; padding: 10px; margin: 8px 0; border-radius: 6px; border: 1px solid #334155; background: #0f172a; color: white; }
-        .btn { width: 100%; padding: 12px; background: #10b981; border: none; border-radius: 8px; color: white; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        :root { --bg: #0f172a; --card: #1e293b; --green: #10b981; --text: #f8fafc; }
+        body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .card { background: var(--card); padding: 2.5rem; border-radius: 1.5rem; text-align: center; width: 340px; border: 1px solid #334155; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }
+        #dist-texto { font-size: 5rem; color: var(--green); font-weight: bold; margin: 15px 0; display: block; transition: all 0.3s; }
+        .unit { color: #94a3b8; font-size: 1.2rem; text-transform: uppercase; letter-spacing: 2px; }
+        input { width: 100%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: white; box-sizing: border-box; }
+        .btn { width: 100%; padding: 14px; background: var(--green); border: none; border-radius: 10px; color: white; font-weight: bold; cursor: pointer; font-size: 1rem; margin-top: 10px; }
+        .status { font-size: 0.75rem; margin-bottom: 1.5rem; color: #94a3b8; }
         .hidden { display: none; }
     </style>
 </head>
 <body>
 
     <div id="login-box" class="card">
-        <h2>🔒 Seguridad</h2>
-        <input type="text" id="usuario" placeholder="Usuario">
+        <h2>🔒 Panel Control</h2>
+        <p style="font-size: 0.8rem; color: #94a3b8;">Ingresa un Usuario de HiveMQ</p>
+        <input type="text" id="user" placeholder="Usuario">
         <input type="password" id="pass" placeholder="Contraseña">
-        <button class="btn" onclick="conectar()">ENTRAR</button>
+        <button class="btn" onclick="conectarMQTT()">CONECTAR PANEL</button>
     </div>
 
     <div id="panel" class="card hidden">
-        <div class="label">Distancia Sensor</div>
-        <span id="distancia-texto">0</span>
-        <div class="label">milímetros</div>
-        <div id="estado-txt" style="margin-top: 20px; color: #f59e0b; font-weight: bold;">SISTEMA ACTIVO</div>
+        <div id="conn-state" class="status">● ESTABLECIENDO CONEXIÓN...</div>
+        <span class="unit">Distancia</span>
+        <span id="dist-texto">0</span>
+        <span class="unit">milímetros</span>
+        <div id="msg-log" style="font-size: 0.7rem; color: #475569; margin-top: 20px;">Esperando datos del ESP32...</div>
     </div>
 
     <script>
         let client;
         const HOST = "7340fcf31a5f4b45984049723fa706e8.s1.eu.hivemq.cloud";
 
-        function conectar() {
-            const u = document.getElementById('usuario').value;
+        function conectarMQTT() {
+            const u = document.getElementById('user').value;
             const p = document.getElementById('pass').value;
-            const cid = "Web_" + Math.floor(Math.random() * 1000);
+            const clientId = "WebClient_" + Math.floor(Math.random() * 10000);
 
-            client = new Paho.MQTT.Client("wss://" + HOST + ":8884/mqtt", cid);
+            client = new Paho.MQTT.Client("wss://" + HOST + ":8884/mqtt", clientId);
 
             client.onMessageArrived = (msg) => {
-                console.log("Datos:", msg.destinationName, "->", msg.payloadString);
+                console.log("Recibido:", msg.destinationName, "->", msg.payloadString);
                 
-                // Si el mensaje es de distancia, actualizamos el número grande
                 if (msg.destinationName === "esp32/distancia") {
-                    document.getElementById("distancia-texto").innerText = msg.payloadString;
+                    const el = document.getElementById("dist-texto");
+                    el.innerText = msg.payloadString;
+                    // Efecto de pulso suave al recibir dato
+                    el.style.transform = "scale(1.05)";
+                    setTimeout(() => el.style.transform = "scale(1)", 100);
+                    document.getElementById("msg-log").innerText = "Sincronizado: " + new Date().toLocaleTimeString();
                 }
-                
-                // Si el mensaje es de estado (APAGADO/ARMAR)
-                if (msg.destinationName === "esp32/estado") {
-                    document.getElementById("estado-txt").innerText = "ESTADO: " + msg.payloadString;
-                }
+            };
+
+            client.onConnectionLost = (e) => {
+                document.getElementById("conn-state").innerText = "❌ CONEXIÓN PERDIDA";
+                document.getElementById("conn-state").style.color = "#ef4444";
             };
 
             client.connect({
@@ -61,9 +68,10 @@
                 onSuccess: () => {
                     document.getElementById("login-box").classList.add("hidden");
                     document.getElementById("panel").classList.remove("hidden");
-                    // Nos suscribimos a todo para asegurar que no se pierda nada
+                    document.getElementById("conn-state").innerText = "● PANEL EN LÍNEA";
+                    document.getElementById("conn-state").style.color = "#10b981";
+                    // Suscribirse a todo
                     client.subscribe("#");
-                    console.log("✅ Suscrito con éxito");
                 },
                 onFailure: (e) => { alert("Error: " + e.errorMessage); }
             });
