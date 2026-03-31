@@ -2,34 +2,33 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Panel de Seguridad IoT</title>
+    <title>Panel de Seguridad - DEBUG</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
     <style>
-        :root { --primary: #10b981; --danger: #ef4444; --text: #f8fafc; }
-        body { background: #0f172a; color: var(--text); font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        body { background: #0f172a; color: white; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
         .card { background: #1e293b; padding: 2rem; border-radius: 1rem; text-align: center; width: 350px; border: 1px solid #334155; }
-        /* El ID 'dist-val' es el que vamos a actualizar */
-        #dist-val { font-size: 4rem; color: var(--primary); font-weight: bold; display: block; margin: 10px 0; }
-        .unit { color: #94a3b8; font-size: 1.2rem; }
+        #dist-val { font-size: 5rem; color: #10b981; font-weight: bold; display: block; }
+        .status { font-size: 0.8rem; margin-bottom: 1rem; padding: 5px; border-radius: 4px; }
+        .on { background: #065f46; color: #34d399; }
+        .off { background: #7f1d1d; color: #f87171; }
         input { width: 90%; padding: 10px; margin: 5px 0; border-radius: 5px; border: 1px solid #334155; background: #0f172a; color: white; }
-        .btn { width: 100%; padding: 12px; background: var(--primary); border: none; border-radius: 8px; color: white; font-weight: bold; cursor: pointer; margin-top: 10px; }
-        .hidden { display: none; }
+        .btn { width: 100%; padding: 12px; background: #10b981; border: none; border-radius: 8px; color: white; font-weight: bold; cursor: pointer; margin-top: 10px; }
     </style>
 </head>
 <body>
 
     <div id="login-section" class="card">
-        <h1>🔐 Acceso</h1>
-        <input type="text" id="mqtt-user" placeholder="Usuario (Ej: Usuario1)">
-        <input type="password" id="mqtt-pass" placeholder="Contraseña">
-        <button class="btn" onclick="conectar()">ENTRAR</button>
+        <h2>🔐 Credenciales</h2>
+        <input type="text" id="u" placeholder="Usuario (Ej: Usuario2)">
+        <input type="password" id="p" placeholder="Contraseña">
+        <button class="btn" onclick="conectar()">CONECTAR</button>
     </div>
 
-    <div id="panel-section" class="card hidden">
-        <div id="status" style="font-size: 0.8rem; color: #10b981; margin-bottom: 10px;">● EN LÍNEA</div>
-        <span id="dist-val">0</span>
-        <span class="unit">mm</span>
-        <div id="system-state" style="margin-top: 15px; color: #f59e0b;">ESTADO: OK</div>
+    <div id="panel" class="card" style="display:none;">
+        <div id="conn-status" class="status off">DESCONECTADO</div>
+        <span style="color: #94a3b8;">Distancia detectada:</span>
+        <span id="dist-val">---</span>
+        <div id="last-msg" style="font-size: 0.7rem; color: #64748b; margin-top: 10px;">Esperando primer mensaje...</div>
     </div>
 
     <script>
@@ -37,29 +36,40 @@
         const HOST = "7340fcf31a5f4b45984049723fa706e8.s1.eu.hivemq.cloud";
 
         function conectar() {
-            const user = document.getElementById('mqtt-user').value;
-            const pass = document.getElementById('mqtt-pass').value;
-            const cid = "Web_" + Math.random().toString(16).substr(2, 4);
+            const user = document.getElementById('u').value;
+            const pass = document.getElementById('p').value;
+            // ID Aleatorio para no chocar con nadie
+            const cid = "Monitor_" + Math.floor(Math.random() * 9999);
 
             client = new Paho.MQTT.Client("wss://" + HOST + ":8884/mqtt", cid);
 
             client.onMessageArrived = (msg) => {
-                console.log("Dato recibido:", msg.payloadString);
-                // Aquí es donde ocurre la magia: buscamos el ID 'dist-val'
+                console.log("🔔 LLEGÓ ALGO:", msg.destinationName, "->", msg.payloadString);
+                document.getElementById("last-msg").innerText = "Último: " + msg.destinationName;
+                
                 if (msg.destinationName === "esp32/distancia") {
                     document.getElementById("dist-val").innerText = msg.payloadString;
                 }
             };
 
+            client.onConnectionLost = (e) => {
+                document.getElementById("conn-status").innerText = "❌ ERROR: " + e.errorMessage;
+                document.getElementById("conn-status").className = "status off";
+            };
+
             client.connect({
                 useSSL: true, userName: user, password: pass,
                 onSuccess: () => {
-                    console.log("✅ Conectado a HiveMQ");
-                    document.getElementById("login-section").classList.add("hidden");
-                    document.getElementById("panel-section").classList.remove("hidden");
-                    client.subscribe("esp32/distancia");
+                    document.getElementById("login-section").style.display = "none";
+                    document.getElementById("panel").style.display = "block";
+                    document.getElementById("conn-status").innerText = "● CONECTADO COMO " + user;
+                    document.getElementById("conn-status").className = "status on";
+                    
+                    // SUSCRIPCIÓN MAESTRA: El '#' escucha TODOS los tópicos del broker
+                    console.log("Suscrito a todo (#)");
+                    client.subscribe("#"); 
                 },
-                onFailure: (e) => { alert("Error: " + e.errorMessage); }
+                onFailure: (e) => { alert("Fallo: " + e.errorMessage); }
             });
         }
     </script>
