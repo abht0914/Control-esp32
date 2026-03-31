@@ -2,55 +2,86 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Panel de Control</title>
+    <title>Panel de Control y Seguridad</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
     <style>
-        body { background: #0f172a; color: white; font-family: sans-serif; text-align: center; padding-top: 50px; }
-        #dato { font-size: 6rem; color: #10b981; font-weight: bold; }
-        .box { background: #1e293b; display: inline-block; padding: 30px; border-radius: 15px; border: 1px solid #334155; }
+        body { background: #0f172a; color: white; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .card { background: #1e293b; padding: 25px; border-radius: 15px; width: 400px; border: 1px solid #334155; }
+        #log-container { background: #000; height: 250px; border-radius: 8px; padding: 10px; margin: 15px 0; overflow-y: auto; font-family: monospace; font-size: 0.85rem; border: 1px solid #475569; }
+        .log-entry { margin-bottom: 5px; border-bottom: 1px solid #1e293b; padding-bottom: 2px; }
+        .time { color: #64748b; margin-right: 8px; }
+        .msg { color: #10b981; }
+        .btn { width: 100%; padding: 12px; margin: 5px 0; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; color: white; transition: opacity 0.2s; }
+        .btn-arm { background: #3b82f6; }
+        .btn-disarm { background: #ef4444; }
+        .btn:active { opacity: 0.7; }
+        input { width: 93%; padding: 10px; margin-bottom: 10px; border-radius: 5px; border: 1px solid #334155; background: #0f172a; color: white; }
     </style>
 </head>
 <body>
 
-    <div id="login">
-        <input type="text" id="u" placeholder="Usuario (Ej: Usuario1)" style="padding:10px; margin:5px;">
-        <input type="password" id="p" placeholder="Password" style="padding:10px; margin:5px;">
-        <button onclick="conectar()" style="padding:10px 20px; cursor:pointer;">ENTRAR</button>
+    <div id="login-box" class="card">
+        <h3>🔐 Acceso al Sistema</h3>
+        <input type="text" id="user-name" placeholder="Tu Nombre de Usuario">
+        <input type="password" id="pass" placeholder="Contraseña MQTT">
+        <button class="btn btn-arm" onclick="iniciarSesion()">CONECTAR</button>
     </div>
 
-    <div id="panel" style="display:none;">
-        <div class="box">
-            <div style="color:#94a3b8">DISTANCIA</div>
-            <div id="dato">0</div>
-            <div id="status" style="font-size:0.8rem">Conectado</div>
+    <div id="main-panel" class="card" style="display:none;">
+        <h3 id="welcome-msg">Panel de Control</h3>
+        
+        <div id="log-container">
+            <div class="log-entry"><span class="msg">Esperando eventos...</span></div>
         </div>
+
+        <button class="btn btn-arm" onclick="enviarComando('ARMAR')">🛡️ ARMAR SISTEMA</button>
+        <button class="btn btn-disarm" onclick="enviarComando('DESACTIVAR')">🔓 DESACTIVAR SISTEMA</button>
     </div>
 
     <script>
-        let mqtt;
-        function conectar() {
-            const user = document.getElementById("u").value;
-            const pass = document.getElementById("p").value;
-            // ID aleatorio para la web
-            const cid = "Web_" + Math.floor(Math.random() * 999);
-            
-            mqtt = new Paho.MQTT.Client("wss://7340fcf31a5f4b45984049723fa706e8.s1.eu.hivemq.cloud:8884/mqtt", cid);
+        let client;
+        let currentUser = "";
+        const host = "7340fcf31a5f4b45984049723fa706e8.s1.eu.hivemq.cloud";
 
-            mqtt.onMessageArrived = (m) => {
-                console.log("Llegó:", m.payloadString);
-                document.getElementById("dato").innerText = m.payloadString;
+        function iniciarSesion() {
+            currentUser = document.getElementById("user-name").value;
+            const password = document.getElementById("pass").value;
+            if(!currentUser) return alert("Escribe tu nombre");
+
+            client = new Paho.MQTT.Client("wss://" + host + ":8884/mqtt", "Web_" + Math.random());
+
+            client.onMessageArrived = (msg) => {
+                const log = document.getElementById("log-container");
+                const hora = new Date().toLocaleTimeString();
+                log.innerHTML += `<div class="log-entry"><span class="time">[${hora}]</span><span class="msg">${msg.payloadString}</span></div>`;
+                log.scrollTop = log.scrollHeight;
             };
 
-            mqtt.connect({
-                useSSL: true, userName: user, password: pass,
+            client.connect({
+                useSSL: true, userName: currentUser, password: password,
                 onSuccess: () => {
-                    document.getElementById("login").style.display = "none";
-                    document.getElementById("panel").style.display = "block";
-                    mqtt.subscribe("esp32/distancia");
-                    console.log("✅ Web suscrita");
+                    document.getElementById("login-box").style.display = "none";
+                    document.getElementById("main-panel").style.display = "block";
+                    document.getElementById("welcome-msg").innerText = "Operador: " + currentUser;
+                    client.subscribe("esp32/log");
                 },
-                onFailure: (e) => { alert("Error: " + e.errorMessage); }
+                onFailure: (e) => alert("Fallo: " + e.errorMessage)
             });
+        }
+
+        function enviarComando(cmd) {
+            const hora = new Date().toLocaleTimeString();
+            const payload = currentUser + " ejecutó: " + cmd;
+            
+            // Enviamos el comando al ESP32
+            const message = new Paho.MQTT.Message(cmd);
+            message.destinationName = "esp32/comando";
+            client.send(message);
+
+            // También lo publicamos en el log para que todos lo vean
+            const logMsg = new Paho.MQTT.Message(payload);
+            logMsg.destinationName = "esp32/log";
+            client.send(logMsg);
         }
     </script>
 </body>
