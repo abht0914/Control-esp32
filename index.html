@@ -1,45 +1,71 @@
-<script>
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Consola de Seguridad Pro</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
+    <style>
+        :root { --bg: #0f172a; --card: #1e293b; --green: #10b981; --red: #ef4444; --blue: #3b82f6; --orange: #f59e0b; }
+        body { background: var(--bg); color: white; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .card { background: var(--card); padding: 30px; border-radius: 20px; width: 400px; border: 1px solid #334155; }
+        .status-header { display: flex; align-items: center; justify-content: center; background: #0f172a; padding: 12px; border-radius: 12px; margin-bottom: 20px; }
+        .dot { width: 12px; height: 12px; border-radius: 50%; background: #475569; margin-right: 12px; }
+        .online { background: var(--green); box-shadow: 0 0 10px var(--green); }
+        #log { background: #000; height: 180px; overflow-y: auto; padding: 12px; font-family: monospace; font-size: 0.85rem; border: 1px solid #475569; margin: 15px 0; border-radius: 8px; }
+        .btn { width: 100%; padding: 14px; margin: 6px 0; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; color: white; }
+        input { width: 100%; padding: 12px; margin-bottom: 12px; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: white; box-sizing: border-box; }
+    </style>
+</head>
+<body>
+
+    <div id="login" class="card">
+        <h2>🔒 Seguridad IoT</h2>
+        <input type="text" id="user" placeholder="Usuario HiveMQ">
+        <input type="password" id="pass" placeholder="Password HiveMQ">
+        <button class="btn" style="background: var(--green)" onclick="conectar()">ACCEDER</button>
+    </div>
+
+    <div id="panel" class="card" style="display:none;">
+        <div class="status-header">
+            <div id="con-dot" class="dot"></div>
+            <span id="con-text">ESP32: DESCONECTADO</span>
+        </div>
+        <div style="text-align: center;">
+            <div id="sys-state" style="font-size: 1.5rem; font-weight: bold; color: var(--orange);">---</div>
+        </div>
+        <div id="log"></div>
+        <button class="btn" style="background: var(--blue)" onclick="enviar('ARMAR')">🛡️ ARMAR</button>
+        <button class="btn" style="background: var(--orange)" onclick="enviar('ACTIVAR')">🚨 PÁNICO</button>
+        <button class="btn" style="background: var(--red)" onclick="enviar('APAGAR')">✖️ DESACTIVAR</button>
+    </div>
+
+    <script>
         let mqtt;
-        let user = "";
         const host = "7340fcf31a5f4b45984049723fa706e8.s1.eu.hivemq.cloud";
 
-        // --- FUNCIÓN PARA CARGAR LOGS GUARDADOS ---
         function cargarHistorial() {
             const logContainer = document.getElementById("log");
             const guardados = JSON.parse(localStorage.getItem("historial_seguridad") || "[]");
-            
-            logContainer.innerHTML = ""; // Limpiar vista actual
+            logContainer.innerHTML = "";
             guardados.forEach(item => {
                 logContainer.innerHTML += `<div><span style="color:#64748b">[${item.hora}]</span> <span style="color:${item.color}">${item.texto}</span></div>`;
             });
             logContainer.scrollTop = logContainer.scrollHeight;
         }
 
-        // --- FUNCIÓN PARA GUARDAR NUEVO LOG (MÁXIMO 10) ---
-        function guardarEnHistorial(texto, color) {
-            const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
+        function guardarLog(texto, color) {
+            const hora = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
             let guardados = JSON.parse(localStorage.getItem("historial_seguridad") || "[]");
-
-            // Añadir el nuevo registro al final
-            guardados.push({ hora: time, texto: texto, color: color });
-
-            // Si hay más de 10, quitar el primero (el más viejo)
-            if (guardados.length > 10) {
-                guardados.shift();
-            }
-
-            // Guardar de vuelta en el navegador
+            guardados.push({ hora, texto, color });
+            if (guardados.length > 10) guardados.shift();
             localStorage.setItem("historial_seguridad", JSON.stringify(guardados));
-            
-            // Refrescar la vista
             cargarHistorial();
         }
 
         function conectar() {
-            user = document.getElementById("user").value;
+            const u = document.getElementById("user").value;
             const p = document.getElementById("pass").value;
-            if(!user) return alert("Ingresa tu nombre");
-
             mqtt = new Paho.MQTT.Client("wss://" + host + ":8884/mqtt", "Web_" + Math.random());
 
             mqtt.onMessageArrived = (msg) => {
@@ -47,52 +73,37 @@
                 const topic = msg.destinationName;
 
                 if (topic === "esp32/link") {
-                    const isOnline = payload === "ONLINE";
-                    document.getElementById("con-dot").className = "dot" + (isOnline ? " online" : "");
-                    document.getElementById("con-text").innerText = "ESP32: " + (isOnline ? "CONECTADO" : "DESCONECTADO");
+                    document.getElementById("con-dot").className = "dot" + (payload === "ONLINE" ? " online" : "");
+                    document.getElementById("con-text").innerText = "ESP32: " + payload;
                 }
-
                 if (topic === "esp32/estado") {
-                    const stateEl = document.getElementById("sys-state");
-                    stateEl.innerText = payload;
-                    if(payload.includes("ALARMA") || payload.includes("ERROR")) stateEl.style.color = "var(--red)";
-                    else if(payload.includes("VIGILANDO")) stateEl.style.color = "var(--blue)";
-                    else stateEl.style.color = "var(--orange)";
+                    document.getElementById("sys-state").innerText = payload;
                 }
-
                 if (topic === "esp32/log") {
-                    let color = "#10b981"; 
+                    let color = "#10b981";
                     if(payload.includes("INTRUSION") || payload.includes("ERROR")) color = "#ef4444";
-                    if(payload.includes("OFFLINE")) color = "#f59e0b";
-
-                    const textoFormateado = payload.replace('|', ': ').replace('_', ' ');
-                    
-                    // Guardar y mostrar
-                    guardarEnHistorial(textoFormateado, color);
+                    guardarLog(payload.replace('|', ': '), color);
                 }
             };
 
-            mqtt.connect({ useSSL: true, userName: user, password: p, 
+            mqtt.connect({ useSSL: true, userName: u, password: p, 
                 onSuccess: () => {
                     document.getElementById("login").style.display = "none";
                     document.getElementById("panel").style.display = "block";
-                    
-                    // Cargar lo que había guardado antes de conectar
                     cargarHistorial();
-
                     mqtt.subscribe("esp32/link");
                     mqtt.subscribe("esp32/estado");
                     mqtt.subscribe("esp32/log");
-                },
-                onFailure: (e) => alert("Error de conexión: Verifica tus credenciales.")
+                }
             });
         }
 
         function enviar(cmd) {
-            if(!mqtt || !mqtt.isConnected()) return alert("No hay conexión MQTT");
+            const user = document.getElementById("user").value;
             const m = new Paho.MQTT.Message(user + ":" + cmd);
             m.destinationName = "esp32/comando";
             mqtt.send(m);
-            if(cmd === "APAGAR") document.getElementById("sys-state").innerText = "APAGANDO...";
         }
     </script>
+</body>
+</html>
