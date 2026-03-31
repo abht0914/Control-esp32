@@ -2,209 +2,65 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Panel de Seguridad IoT - ESP32</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js" type="text/javascript"></script>
-    
+    <title>Panel de Seguridad IoT</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
     <style>
-        :root {
-            --bg: #0f172a;
-            --card: #1e293b;
-            --primary: #10b981;
-            --danger: #ef4444;
-            --text: #f8fafc;
-        }
-
-        body {
-            background-color: var(--bg);
-            color: var(--text);
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            margin: 0;
-        }
-
-        .container {
-            background-color: var(--card);
-            padding: 2rem;
-            border-radius: 1rem;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-            width: 100%;
-            max-width: 400px;
-            text-align: center;
-            border: 1px solid #334155;
-        }
-
-        h1 { font-size: 1.5rem; margin-bottom: 1.5rem; color: var(--primary); }
-        
-        .data-display {
-            background: rgba(0,0,0,0.2);
-            padding: 1.5rem;
-            border-radius: 0.75rem;
-            margin: 1.5rem 0;
-        }
-
-        #dist-val {
-            font-size: 3.5rem;
-            font-weight: bold;
-            color: var(--primary);
-            display: block;
-        }
-
-        .unit { font-size: 1rem; color: #94a3b8; }
-
-        input {
-            width: 100%;
-            padding: 0.75rem;
-            margin: 0.5rem 0;
-            border-radius: 0.5rem;
-            border: 1px solid #334155;
-            background: var(--bg);
-            color: white;
-            box-sizing: border-box;
-        }
-
-        .btn {
-            width: 100%;
-            padding: 0.75rem;
-            border: none;
-            border-radius: 0.5rem;
-            font-weight: bold;
-            cursor: pointer;
-            transition: transform 0.1s;
-            margin-top: 0.5rem;
-        }
-
-        .btn:active { transform: scale(0.98); }
-        .btn-connect { background-color: var(--primary); color: white; }
-        .btn-arm { background-color: #3b82f6; color: white; margin-top: 1rem; }
-        .btn-disarm { background-color: var(--danger); color: white; }
-
-        .status-tag {
-            font-size: 0.75rem;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            color: #94a3b8;
-        }
-
+        :root { --primary: #10b981; --danger: #ef4444; --text: #f8fafc; }
+        body { background: #0f172a; color: var(--text); font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .card { background: #1e293b; padding: 2rem; border-radius: 1rem; text-align: center; width: 350px; border: 1px solid #334155; }
+        /* El ID 'dist-val' es el que vamos a actualizar */
+        #dist-val { font-size: 4rem; color: var(--primary); font-weight: bold; display: block; margin: 10px 0; }
+        .unit { color: #94a3b8; font-size: 1.2rem; }
+        input { width: 90%; padding: 10px; margin: 5px 0; border-radius: 5px; border: 1px solid #334155; background: #0f172a; color: white; }
+        .btn { width: 100%; padding: 12px; background: var(--primary); border: none; border-radius: 8px; color: white; font-weight: bold; cursor: pointer; margin-top: 10px; }
         .hidden { display: none; }
-        #log-area { font-size: 0.7rem; color: #64748b; margin-top: 1rem; height: 40px; overflow: hidden; }
     </style>
 </head>
 <body>
 
-    <div class="container">
-        <div id="login-section">
-            <h1>🔐 Acceso Seguridad</h1>
-            <p style="font-size: 0.9rem; color: #94a3b8;">Usa un usuario distinto al del ESP32</p>
-            <input type="text" id="mqtt-user" placeholder="Usuario (Ej: Usuario1)">
-            <input type="password" id="mqtt-pass" placeholder="Contraseña">
-            <button class="btn btn-connect" onclick="iniciarConexion()">CONECTAR AL CLUSTER</button>
-        </div>
+    <div id="login-section" class="card">
+        <h1>🔐 Acceso</h1>
+        <input type="text" id="mqtt-user" placeholder="Usuario (Ej: Usuario1)">
+        <input type="password" id="mqtt-pass" placeholder="Contraseña">
+        <button class="btn" onclick="conectar()">ENTRAR</button>
+    </div>
 
-        <div id="panel-section" class="hidden">
-            <div id="connection-status" class="status-tag">● Conectando...</div>
-            
-            <div class="data-display">
-                <span class="status-tag">Distancia actual</span>
-                <span id="dist-val">0</span>
-                <span class="unit">milímetros</span>
-            </div>
-
-            <div id="system-state" style="margin-bottom: 1rem; font-weight: bold; color: #f59e0b;">
-                ESTADO: CARGANDO...
-            </div>
-
-            <button class="btn btn-arm" onclick="publicarComando('ARMAR')">🛡️ ARMAR SISTEMA</button>
-            <button class="btn btn-disarm" onclick="publicarComando('APAGAR')">✖️ DESACTIVAR TODO</button>
-            
-            <div id="log-area">Esperando datos...</div>
-        </div>
+    <div id="panel-section" class="card hidden">
+        <div id="status" style="font-size: 0.8rem; color: #10b981; margin-bottom: 10px;">● EN LÍNEA</div>
+        <span id="dist-val">0</span>
+        <span class="unit">mm</span>
+        <div id="system-state" style="margin-top: 15px; color: #f59e0b;">ESTADO: OK</div>
     </div>
 
     <script>
-        let mqttClient;
+        let client;
         const HOST = "7340fcf31a5f4b45984049723fa706e8.s1.eu.hivemq.cloud";
-        const PORT = 8884;
 
-        function iniciarConexion() {
+        function conectar() {
             const user = document.getElementById('mqtt-user').value;
             const pass = document.getElementById('mqtt-pass').value;
+            const cid = "Web_" + Math.random().toString(16).substr(2, 4);
 
-            if(!user || !pass) {
-                alert("Por favor ingresa credenciales");
-                return;
-            }
+            client = new Paho.MQTT.Client("wss://" + HOST + ":8884/mqtt", cid);
 
-            // Generar ID único para que no haya conflicto con el ESP32
-            const clientId = "WebClient_" + Math.random().toString(16).substr(2, 6);
-
-            // Configuración según tu captura: puerto 8884 y path /mqtt
-            mqttClient = new Paho.MQTT.Client("wss://" + HOST + ":" + PORT + "/mqtt", clientId);
-
-            // Manejadores de eventos
-            mqttClient.onConnectionLost = onConnectionLost;
-            mqttClient.onMessageArrived = onMessageArrived;
-
-            const options = {
-                useSSL: true,
-                userName: user,
-                password: pass,
-                onSuccess: onConnect,
-                onFailure: (e) => {
-                    alert("Error de conexión: " + e.errorMessage);
-                    console.error(e);
+            client.onMessageArrived = (msg) => {
+                console.log("Dato recibido:", msg.payloadString);
+                // Aquí es donde ocurre la magia: buscamos el ID 'dist-val'
+                if (msg.destinationName === "esp32/distancia") {
+                    document.getElementById("dist-val").innerText = msg.payloadString;
                 }
             };
 
-            mqttClient.connect(options);
-        }
-
-        function onConnect() {
-            console.log("✅ Conectado a HiveMQ");
-            document.getElementById('login-section').classList.add('hidden');
-            document.getElementById('panel-section').classList.remove('hidden');
-            
-            const statusBox = document.getElementById('connection-status');
-            statusBox.innerText = "● EN LÍNEA";
-            statusBox.style.color = "#10b981";
-
-            // Suscribirse a los tópicos del ESP32
-            mqttClient.subscribe("esp32/distancia");
-            mqttClient.subscribe("esp32/estado");
-            mqttClient.subscribe("esp32/log");
-        }
-
-        function onConnectionLost(responseObject) {
-            if (responseObject.errorCode !== 0) {
-                console.log("❌ Conexión perdida:" + responseObject.errorMessage);
-                document.getElementById('connection-status').innerText = "● DESCONECTADO";
-                document.getElementById('connection-status').style.color = "#ef4444";
-            }
-        }
-
-        function onMessageArrived(message) {
-            const topic = message.destinationName;
-            const payload = message.payloadString;
-
-            if (topic === "esp32/distancia") {
-                document.getElementById('dist-val').innerText = payload;
-            } else if (topic === "esp32/estado") {
-                document.getElementById('system-state').innerText = "ESTADO: " + payload;
-            } else if (topic === "esp32/log") {
-                document.getElementById('log-area').innerText = "Log: " + payload;
-            }
-        }
-
-        function publicarComando(cmd) {
-            const user = document.getElementById('mqtt-user').value;
-            // Enviamos el formato "Usuario:Comando" que espera el Arduino
-            const message = new Paho.MQTT.Message(user + ":" + cmd);
-            message.destinationName = "esp32/comando";
-            mqttClient.send(message);
-            console.log("Comando enviado:", cmd);
+            client.connect({
+                useSSL: true, userName: user, password: pass,
+                onSuccess: () => {
+                    console.log("✅ Conectado a HiveMQ");
+                    document.getElementById("login-section").classList.add("hidden");
+                    document.getElementById("panel-section").classList.remove("hidden");
+                    client.subscribe("esp32/distancia");
+                },
+                onFailure: (e) => { alert("Error: " + e.errorMessage); }
+            });
         }
     </script>
 </body>
