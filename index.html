@@ -2,26 +2,28 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Panel Estable</title>
+    <title>Panel de Control</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
     <style>
-        body { background: #0f172a; color: white; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .card { background: #1e293b; padding: 2rem; border-radius: 1rem; text-align: center; width: 300px; border: 1px solid #334155; }
-        #valor { font-size: 5rem; color: #10b981; font-weight: bold; transition: all 0.2s; }
+        body { background: #0f172a; color: white; font-family: sans-serif; text-align: center; padding-top: 50px; }
+        #dato { font-size: 6rem; color: #10b981; font-weight: bold; }
+        .box { background: #1e293b; display: inline-block; padding: 30px; border-radius: 15px; border: 1px solid #334155; }
     </style>
 </head>
 <body>
 
-    <div id="login" class="card">
-        <input type="text" id="u" placeholder="Usuario" style="width:80%; padding:10px; margin:5px;">
-        <input type="password" id="p" placeholder="Clave" style="width:80%; padding:10px; margin:5px;">
-        <button onclick="conectar()" style="width:86%; padding:10px; background:#10b981; border:none; color:white; font-weight:bold; cursor:pointer;">ENTRAR</button>
+    <div id="login">
+        <input type="text" id="u" placeholder="Usuario (Ej: Usuario1)" style="padding:10px; margin:5px;">
+        <input type="password" id="p" placeholder="Password" style="padding:10px; margin:5px;">
+        <button onclick="conectar()" style="padding:10px 20px; cursor:pointer;">ENTRAR</button>
     </div>
 
-    <div id="panel" class="card" style="display:none;">
-        <div style="color:#94a3b8; font-size:0.8rem;">DISTANCIA</div>
-        <div id="valor">0</div>
-        <div id="status" style="font-size:0.7rem; color:#475569;">Sincronizado</div>
+    <div id="panel" style="display:none;">
+        <div class="box">
+            <div style="color:#94a3b8">DISTANCIA</div>
+            <div id="dato">0</div>
+            <div id="status" style="font-size:0.8rem">Conectado</div>
+        </div>
     </div>
 
     <script>
@@ -29,16 +31,14 @@
         function conectar() {
             const user = document.getElementById("u").value;
             const pass = document.getElementById("p").value;
-            mqtt = new Paho.MQTT.Client("wss://7340fcf31a5f4b45984049723fa706e8.s1.eu.hivemq.cloud:8884/mqtt", "Web_" + Math.random());
+            // ID aleatorio para la web
+            const cid = "Web_" + Math.floor(Math.random() * 999);
+            
+            mqtt = new Paho.MQTT.Client("wss://7340fcf31a5f4b45984049723fa706e8.s1.eu.hivemq.cloud:8884/mqtt", cid);
 
-            mqtt.onMessageArrived = (msg) => {
-                if (msg.destinationName === "esp32/distancia") {
-                    const el = document.getElementById("valor");
-                    el.innerText = msg.payloadString;
-                    // Pequeño efecto visual para confirmar que llegó el dato
-                    el.style.opacity = "0.5";
-                    setTimeout(() => el.style.opacity = "1", 100);
-                }
+            mqtt.onMessageArrived = (m) => {
+                console.log("Llegó:", m.payloadString);
+                document.getElementById("dato").innerText = m.payloadString;
             };
 
             mqtt.connect({
@@ -47,7 +47,9 @@
                     document.getElementById("login").style.display = "none";
                     document.getElementById("panel").style.display = "block";
                     mqtt.subscribe("esp32/distancia");
-                }
+                    console.log("✅ Web suscrita");
+                },
+                onFailure: (e) => { alert("Error: " + e.errorMessage); }
             });
         }
     </script>
