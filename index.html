@@ -2,175 +2,96 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Panel de Seguridad Pro - HiveMQ</title>
+    <title>Panel de Seguridad Pro</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
     <style>
-        :root { --bg: #0f172a; --card: #1e293b; --text: #f1f5f9; --accent: #10b981; }
-        body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; justify-content: center; padding: 20px; }
-        .card { background: var(--card); padding: 25px; border-radius: 16px; border: 1px solid #334155; text-align: center; width: 480px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3); }
-        #dist { font-size: 4rem; color: var(--accent); font-weight: 800; margin: 20px 0; text-shadow: 0 0 20px rgba(16, 185, 129, 0.2); }
-        .btn { width: 100%; padding: 14px; cursor: pointer; border-radius: 10px; border: none; font-weight: bold; margin: 8px 0; color: white; transition: all 0.2s; font-size: 1rem; }
-        .btn:hover { filter: brightness(1.1); transform: translateY(-1px); }
-        .btn:active { transform: translateY(1px); }
+        body { background: #0f172a; color: white; font-family: sans-serif; display: flex; justify-content: center; padding: 20px; }
+        .card { background: #1e293b; padding: 20px; border-radius: 12px; text-align: center; width: 400px; border: 1px solid #334155; }
+        #dist { font-size: 3.5rem; color: #10b981; font-weight: bold; margin: 20px 0; }
+        .btn { width: 100%; padding: 12px; margin: 5px 0; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; color: white; }
         .hidden { display: none; }
-        #stat { background: #334155; padding: 12px; border-radius: 8px; margin-bottom: 10px; font-weight: 600; color: #f59e0b; }
-        table { width: 100%; font-size: 0.8rem; border-collapse: collapse; margin-top: 20px; background: #111827; border-radius: 8px; overflow: hidden; }
-        th { background: #1f2937; color: #94a3b8; padding: 10px; text-align: center; font-size: 0.7rem; text-transform: uppercase; }
-        td { padding: 10px; border-bottom: 1px solid #374151; text-align: center; }
-        tr:hover { background: #1e293b; }
-        input { width: 85%; padding: 12px; margin: 8px 0; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: white; }
+        input { width: 80%; padding: 10px; margin: 5px 0; border-radius: 5px; border: none; }
     </style>
 </head>
 <body>
 
     <div id="login-box" class="card">
-        <h2 style="margin-top:0">🔐 Acceso Seguro</h2>
-        <p style="color: #94a3b8; font-size: 0.9rem;">Usa tus credenciales de HiveMQ Cloud</p>
-        <input type="text" id="u" placeholder="Usuario de HiveMQ">
-        <input type="password" id="p" placeholder="Contraseña">
-        <button class="btn" style="background: var(--accent); margin-top: 15px;" onclick="login()">CONECTAR AL CLUSTER</button>
+        <h2>🔐 Acceso HiveMQ</h2>
+        <input type="text" id="u" placeholder="Usuario (Esp-32)">
+        <input type="password" id="p" placeholder="Password (Controltotal1)">
+        <button class="btn" style="background:#10b981; margin-top:10px;" onclick="login()">ENTRAR</button>
     </div>
 
     <div id="main-panel" class="hidden">
         <div class="card">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                <span id="user-tag" style="color:#94a3b8; font-size: 0.75rem; font-weight: bold;">---</span>
-                <span id="conn-stat" style="color:#ef4444; font-size: 0.7rem;">● DESCONECTADO</span>
-            </div>
-
-            <div id="stat">SINCRONIZANDO...</div>
-            <div id="dist">0 mm</div>
-
-            <button class="btn" style="background:#10b981;" onclick="enviar('ARMAR')">🛡️ ARMAR SISTEMA</button>
-            <button class="btn" style="background:#f59e0b;" onclick="enviar('ACTIVAR')">🚨 PÁNICO</button>
-            <button class="btn" style="background:#ef4444;" onclick="enviar('APAGAR')">✖️ DESARMAR / RESET</button>
-
-            <div style="text-align: left; margin-top: 25px;">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <h4 style="margin:0; color:#94a3b8;">HISTORIAL RECIENTE</h4>
-                    <button onclick="borrarLogs()" style="background:none; border:none; color:#ef4444; cursor:pointer; font-size:0.7rem;">[BORRAR]</button>
-                </div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>HORA</th>
-                            <th>ORIGEN</th>
-                            <th>EVENTO</th>
-                        </tr>
-                    </thead>
-                    <tbody id="logBody"></tbody>
-                </table>
-            </div>
+            <div id="conn-tag" style="font-size: 0.7rem; color: #94a3b8;">DESCONECTADO</div>
+            <div id="dist">Esperando...</div>
+            <div id="stat" style="color: #f59e0b; margin-bottom: 15px;">---</div>
+            
+            <button class="btn" style="background:#10b981;" onclick="enviar('ARMAR')">🛡️ ARMAR</button>
+            <button class="btn" style="background:#ef4444;" onclick="enviar('APAGAR')">✖️ RESET</button>
         </div>
     </div>
 
     <script>
-        let mqtt; 
+        let mqtt;
         let user;
-        const clusterURL = "7340fcf31a5f4b45984049723fa706e8.s1.eu.hivemq.cloud";
-        
-        // Cargar historial persistente desde el navegador
-        let logs = JSON.parse(localStorage.getItem("logs_seguridad")) || [];
+        // URL de tu imagen:
+        const host = "7340fcf31a5f4b45984049723fa706e8.s1.eu.hivemq.cloud";
 
         function login() {
             user = document.getElementById("u").value;
             let pass = document.getElementById("p").value;
 
-            if(!user || !pass) return alert("Por favor, ingresa tus credenciales.");
+            // IMPORTANTE: ClientID único para evitar que el ESP32 y la Web se pateen entre sí
+            const clientId = "WebClient_" + Math.random().toString(16).substr(2, 5);
+            
+            // Ruta obligatoria para HiveMQ: /mqtt
+            mqtt = new Paho.MQTT.Client("wss://" + host + ":8884/mqtt", clientId);
 
-            // USANDO LA RUTA EXACTA DE TU IMAGEN: Puerto 8884 y path /mqtt
-            mqtt = new Paho.MQTT.Client("wss://" + clusterURL + ":8884/mqtt", "web_client_" + Math.random().toString(16).substr(2, 4));
-
-            mqtt.onConnectionLost = (responseObject) => {
-                document.getElementById("conn-stat").innerText = "● RECONECTANDO...";
-                document.getElementById("conn-stat").style.color = "#f59e0b";
-                console.log("Conexión perdida:", responseObject.errorMessage);
-            };
-
-            mqtt.onMessageArrived = (message) => {
-                const topic = message.destinationName;
-                const payload = message.payloadString;
-
-                if(topic === "esp32/distancia") {
-                    document.getElementById("dist").innerText = payload + " mm";
-                } 
-                else if(topic === "esp32/estado") {
-                    document.getElementById("stat").innerText = payload;
-                } 
-                else if(topic === "esp32/log") {
-                    procesarLog(payload);
+            mqtt.onMessageArrived = (m) => {
+                console.log("Mensaje recibido en:", m.destinationName, "Contenido:", m.payloadString);
+                
+                if (m.destinationName === "esp32/distancia") {
+                    document.getElementById("dist").innerText = m.payloadString + " mm";
+                }
+                if (m.destinationName === "esp32/estado") {
+                    document.getElementById("stat").innerText = m.payloadString;
                 }
             };
 
-            mqtt.connect({
+            mqtt.onConnectionLost = (e) => {
+                document.getElementById("conn-tag").innerText = "❌ CONEXIÓN PERDIDA";
+                console.log("Error:", e);
+            };
+
+            const options = {
                 useSSL: true,
                 userName: user,
                 password: pass,
-                keepAliveInterval: 30,
                 onSuccess: () => {
+                    console.log("✅ Web Conectada");
                     document.getElementById("login-box").classList.add("hidden");
                     document.getElementById("main-panel").classList.remove("hidden");
-                    document.getElementById("user-tag").innerText = "OPERADOR: " + user.toUpperCase();
-                    document.getElementById("conn-stat").innerText = "● EN LÍNEA";
-                    document.getElementById("conn-stat").style.color = "#10b981";
+                    document.getElementById("conn-tag").innerText = "● EN LÍNEA";
+                    document.getElementById("conn-tag").style.color = "#10b981";
 
+                    // Suscripción explícita
                     mqtt.subscribe("esp32/distancia");
-                    mqtt.subscribe("esp32/log");
                     mqtt.subscribe("esp32/estado");
-                    
-                    actualizarInterfazLogs();
                 },
                 onFailure: (e) => {
-                    alert("Error de conexión al Cluster. Verifica usuario/password.");
-                    console.log(e);
+                    alert("Fallo de conexión: " + e.errorMessage);
                 }
-            });
-        }
-
-        function procesarLog(msg) {
-            const data = msg.split("|");
-            const now = new Date();
-            const horaStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-
-            const nuevoLog = {
-                h: horaStr,
-                u: data[0] || "SISTEMA",
-                a: data[1] || "ACCION"
             };
 
-            logs.unshift(nuevoLog);
-            if(logs.length > 10) logs.pop(); // Solo guardamos los últimos 10
-
-            localStorage.setItem("logs_seguridad", JSON.stringify(logs));
-            actualizarInterfazLogs();
+            mqtt.connect(options);
         }
 
-        function actualizarInterfazLogs() {
-            const lista = document.getElementById("logBody");
-            lista.innerHTML = logs.map(l => `
-                <tr>
-                    <td style="color:#64748b">${l.h}</td>
-                    <td style="color:#60a5fa; font-weight:bold">${l.u}</td>
-                    <td>${l.a}</td>
-                </tr>
-            `).join("");
-        }
-
-        function enviar(comando) {
-            if(!mqtt || !mqtt.isConnected()) return;
-            // Enviamos con formato Usuario:Comando para que el ESP32 sepa quién lo hizo
-            const mensaje = new Paho.MQTT.Message(user + ":" + comando);
-            mensaje.destinationName = "esp32/comando";
-            mensaje.qos = 1; 
-            mqtt.send(mensaje);
-        }
-
-        function borrarLogs() {
-            if(confirm("¿Deseas vaciar el historial de eventos local?")) {
-                logs = [];
-                localStorage.removeItem("logs_seguridad");
-                actualizarInterfazLogs();
-            }
+        function enviar(acc) {
+            let m = new Paho.MQTT.Message(user + ":" + acc);
+            m.destinationName = "esp32/comando";
+            mqtt.send(m);
         }
     </script>
 </body>
