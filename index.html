@@ -8,64 +8,67 @@
     <style>
         :root { --bg: #0f172a; --card: #1e293b; --green: #10b981; --red: #ef4444; --blue: #3b82f6; --orange: #f59e0b; }
         body { background: var(--bg); color: white; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .card { background: var(--card); padding: 30px; border-radius: 20px; width: 400px; border: 1px solid #334155; }
-        .status-header { display: flex; align-items: center; justify-content: center; background: #0f172a; padding: 12px; border-radius: 12px; margin-bottom: 20px; }
-        .dot { width: 12px; height: 12px; border-radius: 50%; background: #475569; margin-right: 12px; }
-        .online { background: var(--green); box-shadow: 0 0 10px var(--green); }
-        #log { background: #000; height: 180px; overflow-y: auto; padding: 12px; font-family: monospace; font-size: 0.85rem; border: 1px solid #475569; margin: 15px 0; border-radius: 8px; }
-        .btn { width: 100%; padding: 14px; margin: 6px 0; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; color: white; }
-        input { width: 100%; padding: 12px; margin-bottom: 12px; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: white; box-sizing: border-box; }
+        .card { background: var(--card); padding: 30px; border-radius: 20px; width: 380px; border: 1px solid #334155; }
+        .status-header { display: flex; align-items: center; justify-content: center; background: #0f172a; padding: 10px; border-radius: 12px; margin-bottom: 15px; }
+        .dot { width: 10px; height: 10px; border-radius: 50%; background: #475569; margin-right: 10px; }
+        .online { background: var(--green); box-shadow: 0 0 8px var(--green); }
+        #log { background: #000; height: 180px; overflow-y: auto; padding: 10px; font-family: monospace; font-size: 0.8rem; border: 1px solid #475569; margin: 15px 0; border-radius: 8px; color: #cbd5e1; }
+        .btn { width: 100%; padding: 12px; margin: 5px 0; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; color: white; }
+        input { width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 6px; border: 1px solid #334155; background: #0f172a; color: white; box-sizing: border-box; }
     </style>
 </head>
 <body>
 
     <div id="login" class="card">
-        <h2>🔒 Seguridad IoT</h2>
+        <h2 style="text-align: center;">🔒 Acceso Seguridad</h2>
         <input type="text" id="user" placeholder="Usuario HiveMQ">
         <input type="password" id="pass" placeholder="Password HiveMQ">
-        <button class="btn" style="background: var(--green)" onclick="conectar()">ACCEDER</button>
+        <button class="btn" style="background: var(--green)" onclick="conectar()">ENTRAR AL PANEL</button>
     </div>
 
     <div id="panel" class="card" style="display:none;">
         <div class="status-header">
             <div id="con-dot" class="dot"></div>
-            <span id="con-text">ESP32: DESCONECTADO</span>
+            <span id="con-text" style="font-size: 0.8rem;">ESP32: DESCONECTADO</span>
         </div>
         <div style="text-align: center;">
-            <div id="sys-state" style="font-size: 1.5rem; font-weight: bold; color: var(--orange);">---</div>
+            <div id="sys-state" style="font-size: 1.4rem; font-weight: bold; color: var(--orange);">---</div>
         </div>
         <div id="log"></div>
-        <button class="btn" style="background: var(--blue)" onclick="enviar('ARMAR')">🛡️ ARMAR</button>
-        <button class="btn" style="background: var(--orange)" onclick="enviar('ACTIVAR')">🚨 PÁNICO</button>
-        <button class="btn" style="background: var(--red)" onclick="enviar('APAGAR')">✖️ DESACTIVAR</button>
+        <button class="btn" style="background: var(--blue)" onclick="enviar('ARMAR')">🛡️ ARMAR SISTEMA</button>
+        <button class="btn" style="background: var(--orange)" onclick="enviar('ACTIVAR')">🚨 PÁNICO / ACTIVAR</button>
+        <button class="btn" style="background: var(--red)" onclick="enviar('APAGAR')">✖️ DESACTIVAR / RESET</button>
     </div>
 
     <script>
         let mqtt;
+        let user = "";
         const host = "7340fcf31a5f4b45984049723fa706e8.s1.eu.hivemq.cloud";
 
         function cargarHistorial() {
-            const logContainer = document.getElementById("log");
-            const guardados = JSON.parse(localStorage.getItem("historial_seguridad") || "[]");
-            logContainer.innerHTML = "";
+            const logBox = document.getElementById("log");
+            const guardados = JSON.parse(localStorage.getItem("historial_10") || "[]");
+            logBox.innerHTML = "";
             guardados.forEach(item => {
-                logContainer.innerHTML += `<div><span style="color:#64748b">[${item.hora}]</span> <span style="color:${item.color}">${item.texto}</span></div>`;
+                logBox.innerHTML += `<div><span style="color:#64748b">[${item.t}]</span> <span style="color:${item.c}">${item.m}</span></div>`;
             });
-            logContainer.scrollTop = logContainer.scrollHeight;
+            logBox.scrollTop = logBox.scrollHeight;
         }
 
-        function guardarLog(texto, color) {
-            const hora = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
-            let guardados = JSON.parse(localStorage.getItem("historial_seguridad") || "[]");
-            guardados.push({ hora, texto, color });
+        function guardarLog(msg, color) {
+            const t = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+            let guardados = JSON.parse(localStorage.getItem("historial_10") || "[]");
+            guardados.push({ t, m: msg.replace('|',': '), c: color });
             if (guardados.length > 10) guardados.shift();
-            localStorage.setItem("historial_seguridad", JSON.stringify(guardados));
+            localStorage.setItem("historial_10", JSON.stringify(guardados));
             cargarHistorial();
         }
 
         function conectar() {
-            const u = document.getElementById("user").value;
+            user = document.getElementById("user").value;
             const p = document.getElementById("pass").value;
+            if(!user || !p) return alert("Completa los datos");
+
             mqtt = new Paho.MQTT.Client("wss://" + host + ":8884/mqtt", "Web_" + Math.random());
 
             mqtt.onMessageArrived = (msg) => {
@@ -77,32 +80,35 @@
                     document.getElementById("con-text").innerText = "ESP32: " + payload;
                 }
                 if (topic === "esp32/estado") {
-                    document.getElementById("sys-state").innerText = payload;
+                    const el = document.getElementById("sys-state");
+                    el.innerText = payload;
+                    el.style.color = (payload.includes("ALARMA") || payload.includes("ERROR")) ? "var(--red)" : (payload.includes("VIGILANDO") ? "var(--blue)" : "var(--orange)");
                 }
                 if (topic === "esp32/log") {
-                    let color = "#10b981";
-                    if(payload.includes("INTRUSION") || payload.includes("ERROR")) color = "#ef4444";
-                    guardarLog(payload.replace('|', ': '), color);
+                    let c = "#10b981";
+                    if(payload.includes("INTRUSION") || payload.includes("ERROR")) c = "#ef4444";
+                    guardarLog(payload, c);
                 }
             };
 
-            mqtt.connect({ useSSL: true, userName: u, password: p, 
+            mqtt.connect({ useSSL: true, userName: user, password: p, 
                 onSuccess: () => {
                     document.getElementById("login").style.display = "none";
                     document.getElementById("panel").style.display = "block";
                     cargarHistorial();
-                    mqtt.subscribe("esp32/link");
-                    mqtt.subscribe("esp32/estado");
-                    mqtt.subscribe("esp32/log");
-                }
+                    mqtt.subscribe("esp32/#");
+                },
+                onFailure: (e) => alert("Error: Revisa tus credenciales de HiveMQ")
             });
         }
 
         function enviar(cmd) {
-            const user = document.getElementById("user").value;
+            if(!mqtt || !mqtt.isConnected()) return;
             const m = new Paho.MQTT.Message(user + ":" + cmd);
             m.destinationName = "esp32/comando";
+            m.qos = 1;
             mqtt.send(m);
+            console.log("Enviado: " + cmd);
         }
     </script>
 </body>
