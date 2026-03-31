@@ -2,96 +2,73 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Panel de Seguridad Pro</title>
+    <title>Panel de Control - Seguridad</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
     <style>
-        body { background: #0f172a; color: white; font-family: sans-serif; display: flex; justify-content: center; padding: 20px; }
-        .card { background: #1e293b; padding: 20px; border-radius: 12px; text-align: center; width: 400px; border: 1px solid #334155; }
-        #dist { font-size: 3.5rem; color: #10b981; font-weight: bold; margin: 20px 0; }
-        .btn { width: 100%; padding: 12px; margin: 5px 0; border-radius: 8px; border: none; font-weight: bold; cursor: pointer; color: white; }
-        .hidden { display: none; }
-        input { width: 80%; padding: 10px; margin: 5px 0; border-radius: 5px; border: none; }
+        body { background: #0f172a; color: white; font-family: 'Segoe UI', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .card { background: #1e293b; padding: 30px; border-radius: 20px; text-align: center; width: 350px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); border: 1px solid #334155; }
+        #dist { font-size: 4rem; color: #10b981; margin: 20px 0; font-weight: bold; }
+        input { width: 90%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: white; }
+        .btn { width: 100%; padding: 12px; background: #10b981; border: none; border-radius: 8px; color: white; font-weight: bold; cursor: pointer; }
+        .status { font-size: 0.8rem; color: #94a3b8; margin-bottom: 10px; }
     </style>
 </head>
 <body>
 
     <div id="login-box" class="card">
-        <h2>🔐 Acceso HiveMQ</h2>
-        <input type="text" id="u" placeholder="Usuario (Esp-32)">
-        <input type="password" id="p" placeholder="Password (Controltotal1)">
-        <button class="btn" style="background:#10b981; margin-top:10px;" onclick="login()">ENTRAR</button>
+        <h2>🔐 Login HiveMQ</h2>
+        <input type="text" id="u" placeholder="Usuario (Ej: Usuario1)">
+        <input type="password" id="p" placeholder="Contraseña">
+        <button class="btn" onclick="conectar()">CONECTAR PANEL</button>
     </div>
 
-    <div id="main-panel" class="hidden">
-        <div class="card">
-            <div id="conn-tag" style="font-size: 0.7rem; color: #94a3b8;">DESCONECTADO</div>
-            <div id="dist">Esperando...</div>
-            <div id="stat" style="color: #f59e0b; margin-bottom: 15px;">---</div>
-            
-            <button class="btn" style="background:#10b981;" onclick="enviar('ARMAR')">🛡️ ARMAR</button>
-            <button class="btn" style="background:#ef4444;" onclick="enviar('APAGAR')">✖️ RESET</button>
-        </div>
+    <div id="panel" class="card" style="display:none;">
+        <div id="state" class="status">● CONECTANDO...</div>
+        <div style="color: #94a3b8; font-size: 0.9rem;">Distancia del Sensor:</div>
+        <div id="dist">0 mm</div>
+        <button class="btn" style="background:#ef4444;" onclick="location.reload()">DESCONECTAR</button>
     </div>
 
     <script>
-        let mqtt;
-        let user;
-        // URL de tu imagen:
+        let client;
         const host = "7340fcf31a5f4b45984049723fa706e8.s1.eu.hivemq.cloud";
 
-        function login() {
-            user = document.getElementById("u").value;
-            let pass = document.getElementById("p").value;
+        function conectar() {
+            const user = document.getElementById("u").value;
+            const pass = document.getElementById("p").value;
+            const clientId = "Web_User_" + Math.floor(Math.random() * 10000);
 
-            // IMPORTANTE: ClientID único para evitar que el ESP32 y la Web se pateen entre sí
-            const clientId = "WebClient_" + Math.random().toString(16).substr(2, 5);
-            
-            // Ruta obligatoria para HiveMQ: /mqtt
-            mqtt = new Paho.MQTT.Client("wss://" + host + ":8884/mqtt", clientId);
+            // USANDO URL Y PUERTO EXACTOS DE TU IMAGEN
+            client = new Paho.MQTT.Client("wss://" + host + ":8884/mqtt", clientId);
 
-            mqtt.onMessageArrived = (m) => {
-                console.log("Mensaje recibido en:", m.destinationName, "Contenido:", m.payloadString);
-                
-                if (m.destinationName === "esp32/distancia") {
-                    document.getElementById("dist").innerText = m.payloadString + " mm";
-                }
-                if (m.destinationName === "esp32/estado") {
-                    document.getElementById("stat").innerText = m.payloadString;
+            client.onMessageArrived = (msg) => {
+                if (msg.destinationName === "esp32/distancia") {
+                    document.getElementById("dist").innerText = msg.payloadString + " mm";
                 }
             };
 
-            mqtt.onConnectionLost = (e) => {
-                document.getElementById("conn-tag").innerText = "❌ CONEXIÓN PERDIDA";
+            client.onConnectionLost = (e) => {
+                document.getElementById("state").innerText = "❌ DESCONECTADO";
                 console.log("Error:", e);
             };
 
-            const options = {
+            client.connect({
                 useSSL: true,
                 userName: user,
                 password: pass,
                 onSuccess: () => {
-                    console.log("✅ Web Conectada");
-                    document.getElementById("login-box").classList.add("hidden");
-                    document.getElementById("main-panel").classList.remove("hidden");
-                    document.getElementById("conn-tag").innerText = "● EN LÍNEA";
-                    document.getElementById("conn-tag").style.color = "#10b981";
-
-                    // Suscripción explícita
-                    mqtt.subscribe("esp32/distancia");
-                    mqtt.subscribe("esp32/estado");
+                    document.getElementById("login-box").style.display = "none";
+                    document.getElementById("panel").style.display = "block";
+                    document.getElementById("state").innerText = "● EN LÍNEA";
+                    document.getElementById("state").style.color = "#10b981";
+                    
+                    // Suscribirse al tópico que el Arduino publica
+                    client.subscribe("esp32/distancia");
                 },
                 onFailure: (e) => {
-                    alert("Fallo de conexión: " + e.errorMessage);
+                    alert("Error: " + e.errorMessage);
                 }
-            };
-
-            mqtt.connect(options);
-        }
-
-        function enviar(acc) {
-            let m = new Paho.MQTT.Message(user + ":" + acc);
-            m.destinationName = "esp32/comando";
-            mqtt.send(m);
+            });
         }
     </script>
 </body>
