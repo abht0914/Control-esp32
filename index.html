@@ -2,78 +2,52 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Panel de Seguridad IoT</title>
+    <title>Panel Estable</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
     <style>
-        :root { --bg: #0f172a; --card: #1e293b; --green: #10b981; --text: #f8fafc; }
-        body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .card { background: var(--card); padding: 2.5rem; border-radius: 1.5rem; text-align: center; width: 340px; border: 1px solid #334155; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }
-        #dist-texto { font-size: 5rem; color: var(--green); font-weight: bold; margin: 15px 0; display: block; transition: all 0.3s; }
-        .unit { color: #94a3b8; font-size: 1.2rem; text-transform: uppercase; letter-spacing: 2px; }
-        input { width: 100%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 1px solid #334155; background: #0f172a; color: white; box-sizing: border-box; }
-        .btn { width: 100%; padding: 14px; background: var(--green); border: none; border-radius: 10px; color: white; font-weight: bold; cursor: pointer; font-size: 1rem; margin-top: 10px; }
-        .status { font-size: 0.75rem; margin-bottom: 1.5rem; color: #94a3b8; }
-        .hidden { display: none; }
+        body { background: #0f172a; color: white; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
+        .card { background: #1e293b; padding: 2rem; border-radius: 1rem; text-align: center; width: 300px; border: 1px solid #334155; }
+        #valor { font-size: 5rem; color: #10b981; font-weight: bold; transition: all 0.2s; }
     </style>
 </head>
 <body>
 
-    <div id="login-box" class="card">
-        <h2>🔒 Panel Control</h2>
-        <p style="font-size: 0.8rem; color: #94a3b8;">Ingresa un Usuario de HiveMQ</p>
-        <input type="text" id="user" placeholder="Usuario">
-        <input type="password" id="pass" placeholder="Contraseña">
-        <button class="btn" onclick="conectarMQTT()">CONECTAR PANEL</button>
+    <div id="login" class="card">
+        <input type="text" id="u" placeholder="Usuario" style="width:80%; padding:10px; margin:5px;">
+        <input type="password" id="p" placeholder="Clave" style="width:80%; padding:10px; margin:5px;">
+        <button onclick="conectar()" style="width:86%; padding:10px; background:#10b981; border:none; color:white; font-weight:bold; cursor:pointer;">ENTRAR</button>
     </div>
 
-    <div id="panel" class="card hidden">
-        <div id="conn-state" class="status">● ESTABLECIENDO CONEXIÓN...</div>
-        <span class="unit">Distancia</span>
-        <span id="dist-texto">0</span>
-        <span class="unit">milímetros</span>
-        <div id="msg-log" style="font-size: 0.7rem; color: #475569; margin-top: 20px;">Esperando datos del ESP32...</div>
+    <div id="panel" class="card" style="display:none;">
+        <div style="color:#94a3b8; font-size:0.8rem;">DISTANCIA</div>
+        <div id="valor">0</div>
+        <div id="status" style="font-size:0.7rem; color:#475569;">Sincronizado</div>
     </div>
 
     <script>
-        let client;
-        const HOST = "7340fcf31a5f4b45984049723fa706e8.s1.eu.hivemq.cloud";
+        let mqtt;
+        function conectar() {
+            const user = document.getElementById("u").value;
+            const pass = document.getElementById("p").value;
+            mqtt = new Paho.MQTT.Client("wss://7340fcf31a5f4b45984049723fa706e8.s1.eu.hivemq.cloud:8884/mqtt", "Web_" + Math.random());
 
-        function conectarMQTT() {
-            const u = document.getElementById('user').value;
-            const p = document.getElementById('pass').value;
-            const clientId = "WebClient_" + Math.floor(Math.random() * 10000);
-
-            client = new Paho.MQTT.Client("wss://" + HOST + ":8884/mqtt", clientId);
-
-            client.onMessageArrived = (msg) => {
-                console.log("Recibido:", msg.destinationName, "->", msg.payloadString);
-                
+            mqtt.onMessageArrived = (msg) => {
                 if (msg.destinationName === "esp32/distancia") {
-                    const el = document.getElementById("dist-texto");
+                    const el = document.getElementById("valor");
                     el.innerText = msg.payloadString;
-                    // Efecto de pulso suave al recibir dato
-                    el.style.transform = "scale(1.05)";
-                    setTimeout(() => el.style.transform = "scale(1)", 100);
-                    document.getElementById("msg-log").innerText = "Sincronizado: " + new Date().toLocaleTimeString();
+                    // Pequeño efecto visual para confirmar que llegó el dato
+                    el.style.opacity = "0.5";
+                    setTimeout(() => el.style.opacity = "1", 100);
                 }
             };
 
-            client.onConnectionLost = (e) => {
-                document.getElementById("conn-state").innerText = "❌ CONEXIÓN PERDIDA";
-                document.getElementById("conn-state").style.color = "#ef4444";
-            };
-
-            client.connect({
-                useSSL: true, userName: u, password: p,
+            mqtt.connect({
+                useSSL: true, userName: user, password: pass,
                 onSuccess: () => {
-                    document.getElementById("login-box").classList.add("hidden");
-                    document.getElementById("panel").classList.remove("hidden");
-                    document.getElementById("conn-state").innerText = "● PANEL EN LÍNEA";
-                    document.getElementById("conn-state").style.color = "#10b981";
-                    // Suscribirse a todo
-                    client.subscribe("#");
-                },
-                onFailure: (e) => { alert("Error: " + e.errorMessage); }
+                    document.getElementById("login").style.display = "none";
+                    document.getElementById("panel").style.display = "block";
+                    mqtt.subscribe("esp32/distancia");
+                }
             });
         }
     </script>
